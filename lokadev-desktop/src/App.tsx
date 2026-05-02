@@ -6,7 +6,7 @@ import {
   Terminal, Folder, Server, Activity, Cpu, HardDrive,
   Play, Square, RotateCcw, Plus, Globe, Trash2, Settings,
   Minus, Maximize2, X, ExternalLink, Search, RefreshCw,
-  LayoutDashboard, AppWindow,
+  LayoutDashboard, type LucideIcon,
 } from "lucide-react";
 
 type ProjectStatus = "running" | "stopped" | "error";
@@ -112,7 +112,7 @@ export default function App() {
   const selectedProject = projects.find(p => p.name === selected);
   const running = projects.filter(p => p.status === "running").length;
 
-  const NAV: { id: Tab; label: string; Icon: React.FC<{ size?: number; className?: string }> }[] = [
+  const NAV: { id: Tab; label: string; Icon: LucideIcon }[] = [
     { id: "projects", label: "Projects",  Icon: Folder },
     { id: "services", label: "Services",  Icon: Server },
     { id: "logs",     label: "Logs",      Icon: Activity },
@@ -424,14 +424,14 @@ export default function App() {
                             <div className={`w-3.5 h-3.5 rounded-full bg-white m-0.5 transition-transform ${item.val ? "translate-x-4" : ""}`} />
                           </div>
                         )}
-                        {item.type === "input" && (
+                        {item.type === "input" && typeof item.val === "string" && (
                           <input defaultValue={item.val}
                             className="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-[11px] font-mono text-[#e6edf3] outline-none focus:border-cyan-500/50 w-40"
                             style={{ WebkitUserSelect: "text", userSelect: "text" }}
                           />
                         )}
-                        {item.type === "link" && (
-                          <button onClick={() => open(item.val!)}
+                        {item.type === "link" && typeof item.val === "string" && (
+                          <button onClick={() => open(item.val as string)}
                             className="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1">
                             GitHub <ExternalLink size={10} />
                           </button>
