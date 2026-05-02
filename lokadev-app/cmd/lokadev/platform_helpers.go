@@ -1,14 +1,18 @@
 package lokadev
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"time"
+
+	"github.com/fatih/color"
+	"github.com/lokadev/lokadev/internal/registry"
 )
 
-// openBrowser opens a URL in the default system browser.
 func openBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -24,7 +28,6 @@ func openBrowser(url string) error {
 	return cmd.Start()
 }
 
-// openEditor opens a file in the user's preferred editor ($EDITOR).
 func openEditor(path string) error {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -45,34 +48,27 @@ func openEditor(path string) error {
 	return cmd.Run()
 }
 
-// enterNamespace drops into a shell inside the project namespace.
-func enterNamespace(project string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		shell := os.Getenv("SHELL")
-		if shell == "" {
+func enterProjectShell(dir string) error {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		switch runtime.GOOS {
+		case "windows":
+			shell = "cmd.exe"
+		default:
 			shell = "/bin/bash"
 		}
-		cmd = exec.Command("nsenter",
-			fmt.Sprintf("--target=$(cat /run/lokadev/%s.pid)", project),
-			"--net", "--user", "--pid", "--", shell)
-	case "windows":
-		cmd = exec.Command("cmd.exe")
-	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
+	cmd := exec.Command(shell)
+	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// enterDBShell opens the appropriate database CLI shell.
 func enterDBShell(project string) error {
-	// In a real implementation, read project config to determine db type
-	// For now, default to mysql
-	cmd := exec.Command("mysql", fmt.Sprintf("--socket=/run/lokadev/%s/mysql.sock", project),
+	cmd := exec.Command("mysql",
+		"--socket="+project+"/mysql.sock",
 		"-u", "root")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -80,31 +76,79 @@ func enterDBShell(project string) error {
 	return cmd.Run()
 }
 
-// dumpDatabase dumps a project database to stdout.
 func dumpDatabase(project string) error {
 	cmd := exec.Command("mysqldump",
-		fmt.Sprintf("--socket=/run/lokadev/%s/mysql.sock", project),
+		"--socket="+project+"/mysql.sock",
 		"-u", "root", "--all-databases")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// restoreDatabase restores a project database from stdin.
 func restoreDatabase(project string) error {
 	cmd := exec.Command("mysql",
-		fmt.Sprintf("--socket=/run/lokadev/%s/mysql.sock", project),
+		"--socket="+project+"/mysql.sock",
 		"-u", "root")
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = io.Discard
+	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// startDaemon starts the LokaDev background daemon.
 func startDaemon() error {
-	fmt.Println("LokaDev daemon starting...")
-	fmt.Println("Dashboard: http://localhost:25000")
-	// Block forever (daemon mode)
-	select {}
+	port := 25000
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		reg, err := registry.Load()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reg.ReconcileStatus()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(reg.All())
+	})
+
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(map[string]string{
+			"version": version,
+			"status":  "running",
+			"time":    time.Now().Format(time.RFC3339),
+		})
+	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<!doctype html>
+<html>
+<head><title>LokaDev Dashboard</title>
+<style>
+body{font-family:monospace;background:#0a0a0a;color:#e2e8f0;padding:40px;max-width:900px;margin:0 auto}
+h1{color:#22d3ee;font-size:2rem;margin-bottom:8px}
+p{color:#64748b;margin-bottom:32px}
+a{color:#22d3ee;text-decoration:none}
+</style>
+</head>
+<body>
+<h1>&gt;_ LokaDev v%s</h1>
+<p>Dashboard is running. Use the CLI to manage projects.</p>
+<p>API: <a href="/api/projects">/api/projects</a> &nbsp;|&nbsp; <a href="/api/status">/api/status</a></p>
+</body>
+</html>`, version)
+	})
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	fmt.Printf("\n  %s LokaDev daemon started\n", color.GreenString("✔"))
+	fmt.Printf("  Dashboard: %s\n", cyan(fmt.Sprintf("http://localhost:%d", port)))
+	fmt.Printf("  API:       %s\n\n", cyan(fmt.Sprintf("http://localhost:%d/api/projects", port)))
+	fmt.Printf("  Press Ctrl+C to stop.\n\n")
+
+	srv := &http.Server{Addr: addr, Handler: mux}
+	return srv.ListenAndServe()
 }

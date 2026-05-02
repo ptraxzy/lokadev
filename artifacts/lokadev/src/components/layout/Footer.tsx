@@ -33,7 +33,7 @@ export function Footer() {
             <h3 className="font-semibold mb-4 text-foreground">Links</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link href="/download" className="hover:text-primary transition-colors">Download</Link></li>
-              <li><a href="https://github.com" className="hover:text-primary transition-colors">GitHub Repository</a></li>
+              <li><a href="https://github.com/ptraxzy/lokadev" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">GitHub Repository</a></li>
               <li><a href="#" className="hover:text-primary transition-colors">Discord Community</a></li>
               <li><Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
             </ul>

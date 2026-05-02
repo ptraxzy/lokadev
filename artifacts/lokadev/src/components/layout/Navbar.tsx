@@ -23,7 +23,7 @@ export function Navbar() {
           <Link href="/docs" className={`text-sm font-medium transition-colors hover:text-primary ${location === '/docs' ? 'text-foreground' : 'text-muted-foreground'}`}>
             Documentation
           </Link>
-          <a href="https://github.com" target="_blank" rel="noreferrer" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+          <a href="https://github.com/ptraxzy/lokadev" target="_blank" rel="noreferrer" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
             <Github size={16} /> GitHub
           </a>
           <Link href="/download" data-testid="nav-download">
@@ -44,7 +44,7 @@ export function Navbar() {
           <Link href="/docs" className="block text-sm font-medium text-muted-foreground hover:text-primary" onClick={toggleMenu}>
             Documentation
           </Link>
-          <a href="https://github.com" className="block text-sm font-medium text-muted-foreground hover:text-primary" onClick={toggleMenu}>
+          <a href="https://github.com/ptraxzy/lokadev" target="_blank" rel="noreferrer" className="block text-sm font-medium text-muted-foreground hover:text-primary" onClick={toggleMenu}>
             GitHub
           </a>
           <Link href="/download" className="block" onClick={toggleMenu}>

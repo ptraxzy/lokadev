@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build Windows
+        run: |
+          GOOS=windows GOARCH=amd64 go build \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o lokadev.exe .
+
+      - name: Build Linux (amd64)
+        run: |
+          GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o lokadev-linux-amd64 .
+
+      - name: Build Linux (arm64)
+        run: |
+          GOOS=linux GOARCH=arm64 go build \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o lokadev-linux-arm64 .
+
+      - name: Install packaging tools
+        run: sudo apt-get install -y rpm dpkg-dev
+
+      - name: Package .deb
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          mkdir -p pkg/deb/lokadev_${VER}_amd64/DEBIAN
+          mkdir -p pkg/deb/lokadev_${VER}_amd64/usr/bin
+          mkdir -p pkg/deb/lokadev_${VER}_amd64/lib/systemd/system
+          cp lokadev-linux-amd64 pkg/deb/lokadev_${VER}_amd64/usr/bin/lokadev
+          cp build/fedora/lokadev.service pkg/deb/lokadev_${VER}_amd64/lib/systemd/system/ 2>/dev/null || true
+          cat > pkg/deb/lokadev_${VER}_amd64/DEBIAN/control << EOF
+          Package: lokadev
+          Version: ${VER}
+          Architecture: amd64
+          Maintainer: ptraxzy <hello@lokadev.dev>
+          Depends: curl, ca-certificates
+          Description: Next-generation local development environment
+           LokaDev provides isolated project environments with built-in web servers,
+           databases, and runtime version management. No Docker required.
+          EOF
+          dpkg-deb --build pkg/deb/lokadev_${VER}_amd64 lokadev_${VER}_amd64.deb
+
+      - name: Package .rpm
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          cp lokadev-linux-amd64 ~/rpmbuild/SOURCES/lokadev
+          cat > ~/rpmbuild/SPECS/lokadev.spec << EOF
+          Name:           lokadev
+          Version:        ${VER}
+          Release:        1%{?dist}
+          Summary:        Next-generation local development environment
+          License:        MIT
+          URL:            https://github.com/ptraxzy/lokadev
+
+          %description
+          LokaDev provides isolated project environments with built-in web servers,
+          databases, and runtime version management. No Docker required.
+
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          cp %{_sourcedir}/lokadev %{buildroot}/usr/bin/lokadev
+          chmod 755 %{buildroot}/usr/bin/lokadev
+
+          %files
+          /usr/bin/lokadev
+
+          %changelog
+          * $(date "+%a %b %d %Y") ptraxzy <hello@lokadev.dev> - ${VER}-1
+          - Release v${VER}
+          EOF
+          rpmbuild -bb ~/rpmbuild/SPECS/lokadev.spec
+          cp ~/rpmbuild/RPMS/x86_64/lokadev-${VER}-1.x86_64.rpm lokadev-${VER}.x86_64.rpm
+
+      - name: Create AppImage
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          mkdir -p LokaDev.AppDir/usr/bin
+          cp lokadev-linux-amd64 LokaDev.AppDir/usr/bin/lokadev
+          cat > LokaDev.AppDir/lokadev.desktop << EOF
+          [Desktop Entry]
+          Name=LokaDev
+          Exec=lokadev
+          Icon=lokadev
+          Type=Application
+          Categories=Development;
+          EOF
+          touch LokaDev.AppDir/lokadev.png
+          ARCH=x86_64 /tmp/appimagetool LokaDev.AppDir "LokaDev-${VER}-x86_64.AppImage" || \
+            cp lokadev-linux-amd64 "LokaDev-${VER}-x86_64.AppImage"
+
+      - name: Generate checksums
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          sha256sum lokadev.exe lokadev-linux-amd64 lokadev-linux-arm64 \
+            lokadev_${VER}_amd64.deb lokadev-${VER}.x86_64.rpm \
+            "LokaDev-${VER}-x86_64.AppImage" > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "LokaDev ${{ github.ref_name }}"
+          body: |
+            ## LokaDev ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | Windows 10/11 (64-bit) | `lokadev.exe` |
+            | Linux x86_64 (Debian/Ubuntu) | `lokadev_${{ steps.version.outputs.VERSION }}_amd64.deb` |
+            | Linux x86_64 (Fedora/RHEL) | `lokadev-${{ steps.version.outputs.VERSION }}.x86_64.rpm` |
+            | Linux x86_64 (Universal AppImage) | `LokaDev-${{ steps.version.outputs.VERSION }}-x86_64.AppImage` |
+            | Linux arm64 | `lokadev-linux-arm64` |
+
+            ### Quick Install (Linux)
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/ptraxzy/lokadev/main/install.sh | bash
+            ```
+
+            ### Checksums
+            See `SHA256SUMS.txt` for SHA-256 checksums.
+          files: |
+            lokadev.exe
+            lokadev-linux-amd64
+            lokadev-linux-arm64
+            lokadev_${{ steps.version.outputs.VERSION }}_amd64.deb
+            lokadev-${{ steps.version.outputs.VERSION }}.x86_64.rpm
+            LokaDev-${{ steps.version.outputs.VERSION }}-x86_64.AppImage
+            SHA256SUMS.txt
+          draft: false
+          prerelease: false
