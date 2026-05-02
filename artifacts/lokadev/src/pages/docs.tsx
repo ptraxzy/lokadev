@@ -319,10 +319,10 @@ lokadev --help`} />
             <div className="border border-yellow-500/20 bg-yellow-500/5 rounded-lg p-4 text-sm text-muted-foreground mb-4">
               <strong className="text-yellow-400 block mb-2">Fedora 41+ Note</strong>
               Fedora 41+ removed <code className="text-foreground bg-secondary/50 px-1 rounded text-xs">webkit2gtk4.0-devel</code>.
-              The desktop app uses <code className="text-foreground bg-secondary/50 px-1 rounded text-xs">webkitgtk6.0</code> (Tauri v2).
+              Tauri v2 requires <code className="text-foreground bg-secondary/50 px-1 rounded text-xs">webkit2gtk4.1</code> instead.
               Install the required runtime:
             </div>
-            <CodeBlock code={`sudo dnf install -y webkitgtk6.0 libayatana-appindicator-gtk3
+            <CodeBlock code={`sudo dnf install -y webkit2gtk4.1 libayatana-appindicator-gtk3
 
 # Download from GitHub Releases:
 # File: lokadev-desktop_1.0.4_amd64.deb  OR
@@ -363,8 +363,8 @@ lokadev --help`} />
 
             <h4 className="font-semibold text-foreground mt-6 mb-2">Desktop App (Tauri v2 — Fedora 41+)</h4>
             <CodeBlock code={`# System dependencies
-sudo dnf install -y gcc openssl-devel librsvg2-devel \\
-  webkitgtk6.0-devel libayatana-appindicator-gtk3-devel
+sudo dnf install -y gcc openssl-devel librsvg2-devel \
+  webkit2gtk4.1-devel libayatana-appindicator-gtk3-devel
 
 # Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
