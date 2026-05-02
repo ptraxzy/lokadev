@@ -1,97 +1,141 @@
 # LokaDev Desktop
 
-Native desktop application for LokaDev, built with [Tauri](https://tauri.app) (Rust) + React + Vite.
+Native desktop application for LokaDev — built with [Tauri v2](https://tauri.app) (Rust + React).
 
-## Prerequisites
+Works alongside the LokaDev CLI daemon and provides a full GUI dashboard with system tray integration.
 
-### Fedora / RHEL
+## Features
+
+- Native windowed app (no Electron, no browser required)
+- System tray icon — minimize to tray, always running
+- Auto-starts the LokaDev daemon on launch
+- Start / stop / restart projects with one click
+- Real-time project status via daemon REST API polling
+- Frameless dark window
+- Close button hides to tray (daemon stays alive)
+
+## Requirements
+
+Install the **LokaDev CLI** first — the desktop app calls the `lokadev` binary:
 
 ```bash
-sudo dnf install -y \
-  gcc \
-  webkit2gtk4.0-devel \
-  openssl-devel \
-  curl \
-  wget \
-  libayatana-appindicator-gtk3-devel \
-  librsvg2-devel
+# Fedora/RHEL
+sudo dnf install ./lokadev-*.x86_64.rpm
 
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
+# Debian/Ubuntu
+sudo dpkg -i lokadev_*_amd64.deb
 ```
 
-### Debian / Ubuntu
+## Build from Source
+
+### Fedora 41+ / Fedora 43 (Tauri v2)
+
+> **Note:** Fedora 41+ removed `webkit2gtk4.0-devel`. Tauri v2 uses `webkitgtk6.0-devel` instead.
+
+```bash
+# 1. System dependencies (Fedora 41+ / Fedora 43)
+sudo dnf install -y gcc openssl-devel librsvg2-devel \
+  webkitgtk6.0-devel libayatana-appindicator-gtk3-devel
+
+# 2. Rust (if not installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+# 3. Node.js (if not installed)
+sudo dnf install -y nodejs
+
+# 4. Go to the desktop directory (from repo root — NOT from lokadev-app/)
+cd ~/lokadev/lokadev-desktop
+
+# 5. Install JS dependencies
+npm install
+
+# 6. Generate app icons (only needed once)
+npm run generate-icons
+
+# 7. Build
+npm run tauri build
+```
+
+Output bundles:
+```
+src-tauri/target/release/bundle/
+  deb/      lokadev-desktop_1.0.4_amd64.deb
+  rpm/      lokadev-desktop-1.0.4-1.x86_64.rpm
+  appimage/ LokaDev-Desktop_1.0.4_amd64.AppImage
+```
+
+### Debian / Ubuntu (Tauri v2)
 
 ```bash
 sudo apt-get install -y \
-  libwebkit2gtk-4.0-dev \
-  build-essential \
-  curl \
-  wget \
-  libssl-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+  librsvg2-dev libssl-dev build-essential
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
+
+cd ~/lokadev/lokadev-desktop
+npm install
+npm run generate-icons
+npm run tauri build
 ```
 
 ### Windows
 
-- Install [Rust](https://www.rust-lang.org/tools/install) (MSVC toolchain)
-- Install [Node.js 20+](https://nodejs.org/)
-- WebView2 is bundled automatically
+```powershell
+# Prerequisites: Rust (https://rustup.rs), Node.js LTS
+# WebView2 is auto-installed by the MSI
 
-## Building
-
-```bash
-cd lokadev-desktop
-
-# Install Node dependencies
+cd lokadev\lokadev-desktop
 npm install
-
-# Development (hot-reload)
-npm run tauri dev
-
-# Production build
+npm run generate-icons
 npm run tauri build
+# → src-tauri\target\release\bundle\msi\LokaDev_1.0.4_x64_en-US.msi
 ```
 
-Output binaries will be in `src-tauri/target/release/bundle/`:
-- Linux: `.deb`, `.rpm`, `.AppImage`
-- Windows: `.msi`, `.exe` (NSIS installer)
-
-## Icons
-
-Generate proper icons from the SVG source:
+## Development (live reload)
 
 ```bash
-npm run tauri icon ../assets/lokadev-icon.svg
+cd ~/lokadev/lokadev-desktop
+npm install
+npm run tauri dev
 ```
 
-This creates all required icon sizes in `src-tauri/icons/`.
+## Common Errors
 
-## Architecture
+| Error | Fix |
+|---|---|
+| `No match for argument: webkit2gtk4.0-devel` | Fedora 41+: use `webkitgtk6.0-devel` (Tauri v2 requirement) |
+| `cd: no such file or directory: lokadev-desktop` | You're inside `lokadev-app/`. Run `cd ~/lokadev/lokadev-desktop` |
+| `npm error Missing script: "tauri"` | Wrong directory. Must be inside `lokadev-desktop/`, not the repo root |
+| `Use pnpm instead` | You're at the monorepo root. `cd lokadev-desktop` first |
+| `icons/32x32.png not found` | Run `npm run generate-icons` before building |
+
+## Project Structure
 
 ```
 lokadev-desktop/
-├── src/              # React frontend (Vite)
-│   ├── App.tsx       # Main dashboard UI
-│   └── index.css     # Tailwind styles
-└── src-tauri/
-    ├── src/main.rs   # Rust backend
-    │   ├── list_projects() → polls daemon API at :25000
-    │   ├── run_lokadev()   → executes lokadev CLI commands
-    │   └── start_daemon()  → starts background daemon
-    └── tauri.conf.json
+├── src/
+│   ├── App.tsx              Main React dashboard UI
+│   └── main.tsx             React entry point
+├── src-tauri/
+│   ├── src/
+│   │   ├── main.rs          Entry point (calls lib::run)
+│   │   └── lib.rs           Tauri v2 setup, tray, commands
+│   ├── Cargo.toml           Rust deps (tauri 2, tauri-plugin-shell)
+│   ├── tauri.conf.json      App config (Tauri v2 schema)
+│   └── icons/               Generated by npm run generate-icons
+├── lokadev-icon.svg         Source icon (used by tauri icon command)
+├── package.json
+├── vite.config.ts
+└── tsconfig.json
 ```
 
 ## How it works
 
-1. On launch, the app auto-starts the `lokadev daemon` in background
-2. The React UI polls `http://localhost:25000/api/projects` every 3 seconds
-3. CLI actions (start/stop/create) invoke the `lokadev` binary via Tauri commands
-4. Closing the window hides it to the system tray
-5. The system tray icon gives quick access to all project actions
+1. On launch the app auto-starts `lokadev daemon` in the background
+2. React UI polls `http://localhost:25000/api/projects` every 3 seconds
+3. CLI actions (start/stop/create) call `lokadev` binary via Tauri commands
+4. Closing the window hides it to the system tray (daemon keeps running)
+5. System tray left-click toggles the window; right-click shows the menu
