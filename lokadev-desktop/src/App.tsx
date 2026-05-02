@@ -273,7 +273,7 @@ export default function App() {
 
   const { projects, loading, daemonOk, refresh, runCmd } = useProjects();
   const { services, busy: svcBusy, toggle: toggleSvc }   = useServices();
-  const { logs, source, setSource, endRef, fetchLogs }   = useLogs(projects);
+  const { logs, source, setSource, endRef, fetchLogs }   = useLogs();
   const { settings, update: updateSettings }             = useSettings();
 
   const filtered        = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
