@@ -8,53 +8,42 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #0d0d12;
-  color: rgba(255,255,255,0.75);
-  font-family: "Inter", "SF Pro Display", system-ui, -apple-system, sans-serif;
   -webkit-user-select: none;
   user-select: none;
-  font-size: 13px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Use monospace for code elements only */
-code, pre, .font-mono {
-  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* Scrollbar – light */
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 
-/* Pulse animation for running status dots */
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.pulse-dot { animation: pulse-dot 2.5s ease-in-out infinite; }
+/* Scrollbar – dark override */
+.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 
-/* Spin animation for loading state */
-@keyframes spin { to { transform: rotate(360deg); } }
-.animate-spin { animation: spin 0.8s linear infinite; }
-
-/* Subtle fade-in for content */
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.fade-in { animation: fade-in 0.15s ease-out; }
-
-/* Select element in dark context */
-select option {
-  background: #1a1a22;
-  color: rgba(255,255,255,0.7);
-}
-
-/* Inputs selectable */
+/* Inputs & selects are selectable */
 input, select, textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+select option { background: inherit; }
+
+/* Animations */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.pulse-dot { animation: pulse-dot 2.5s ease-in-out infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 0.75s linear infinite; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.18s ease-out; }
