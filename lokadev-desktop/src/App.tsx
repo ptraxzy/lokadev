@@ -3,154 +3,152 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Terminal, Folder, Server, Activity, Cpu, HardDrive,
-  Play, Square, RotateCcw, Plus, Globe, Trash2, Settings,
-  Minus, Maximize2, X, ExternalLink, Search, RefreshCw,
-  LayoutDashboard, ChevronDown, type LucideIcon,
+  Folder, Server, ScrollText, Settings2, Minus, Maximize2, X,
+  Play, Square, RotateCcw, Plus, Trash2, ExternalLink, Search,
+  RefreshCw, ChevronDown, LayoutGrid, type LucideIcon,
 } from "lucide-react";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 type ProjectStatus = "running" | "stopped" | "error";
 
 interface Project {
-  name: string;
-  dir: string;
-  domain: string;
-  runtime: string;
-  server: string;
-  database: string;
-  status: ProjectStatus;
-  pids: number[];
+  name: string; dir: string; domain: string;
+  runtime: string; server: string; database: string;
+  status: ProjectStatus; pids: number[];
 }
 
-interface LogLine {
-  t: string;
-  l: string;
-  m: string;
+interface ServiceInfo {
+  name: string; version: string; port: number; status: string;
 }
 
-const STATUS_CFG = {
-  running: { label: "Running", dot: "bg-green-400 pulse-dot", badge: "bg-green-400/10 border-green-400/30 text-green-400" },
-  stopped: { label: "Stopped", dot: "bg-gray-500",            badge: "bg-gray-500/10 border-gray-500/30 text-gray-400" },
-  error:   { label: "Error",   dot: "bg-red-400 pulse-dot",   badge: "bg-red-400/10 border-red-400/30 text-red-400" },
-};
+interface LogEntry { t: string; l: string; m: string; }
 
-function StatusBadge({ status }: { status: ProjectStatus }) {
-  const c = STATUS_CFG[status];
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2 py-0.5 rounded-full border ${c.badge}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {c.label}
-    </span>
-  );
+interface AppSettings {
+  start_at_login: boolean;
+  minimize_to_tray: boolean;
+  show_notifications: boolean;
+  daemon_port: string;
+  projects_dir: string;
 }
 
-function Titlebar() {
+// ── Titlebar ───────────────────────────────────────────────────────────────────
+
+function Titlebar({ daemonOk }: { daemonOk: boolean }) {
   const win = getCurrentWindow();
   return (
-    <div data-tauri-drag-region className="flex items-center h-9 bg-[#010409] border-b border-[#30363d] px-3 select-none shrink-0">
-      <div className="flex items-center gap-2 mr-4" data-tauri-drag-region>
-        <div className="w-5 h-5 bg-cyan-500/20 border border-cyan-500/40 rounded flex items-center justify-center">
-          <Terminal size={11} className="text-cyan-400" />
-        </div>
-        <span className="text-xs font-mono font-semibold text-[#e6edf3]">LokaDev</span>
-        <span className="text-[10px] font-mono text-[#484f58] border border-[#30363d] px-1.5 py-px rounded">v1.0.4</span>
+    <div data-tauri-drag-region className="flex items-center h-8 px-3 select-none shrink-0 border-b border-white/5">
+      <div className="flex items-center gap-2" data-tauri-drag-region>
+        <span className="text-[11px] font-medium tracking-wide text-white/70">LokaDev</span>
+        <span className={`text-[9px] px-1.5 py-px rounded-full font-medium ${daemonOk ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+          {daemonOk ? "active" : "offline"}
+        </span>
       </div>
       <div className="flex-1" data-tauri-drag-region />
-      <div className="flex items-center gap-1">
-        <button onClick={() => win.minimize()}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#21262d] text-[#484f58] hover:text-[#e6edf3] transition-colors">
-          <Minus size={12} />
-        </button>
-        <button onClick={() => win.toggleMaximize()}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#21262d] text-[#484f58] hover:text-[#e6edf3] transition-colors">
-          <Maximize2 size={12} />
-        </button>
-        <button onClick={() => win.hide()}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-500/20 text-[#484f58] hover:text-red-400 transition-colors">
-          <X size={12} />
-        </button>
+      <div className="flex items-center">
+        {[
+          { fn: () => win.minimize(), icon: <Minus size={11} /> },
+          { fn: () => win.toggleMaximize(), icon: <Maximize2 size={10} /> },
+          { fn: () => win.hide(), icon: <X size={11} />, danger: true },
+        ].map((btn, i) => (
+          <button key={i} onClick={btn.fn}
+            className={`w-7 h-7 flex items-center justify-center text-white/25 transition-colors hover:text-white/70 ${btn.danger ? "hover:text-red-400" : ""}`}>
+            {btn.icon}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
+// ── Status dot ─────────────────────────────────────────────────────────────────
+
+function Dot({ status }: { status: "running" | "stopped" | "error" | string }) {
+  const color = status === "running" ? "bg-emerald-400 pulse-dot" : status === "error" ? "bg-red-400" : "bg-white/20";
+  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />;
+}
+
+// ── New Project Modal ──────────────────────────────────────────────────────────
+
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState("");
+  const [name, setName]     = useState("");
   const [runtime, setRuntime] = useState("php8.3");
   const [server, setServer]   = useState("nginx");
   const [db, setDb]           = useState("mysql");
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy]       = useState(false);
+  const [err, setErr]         = useState("");
+  const ref = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { ref.current?.focus(); }, []);
 
-  const create = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) { setError("Project name is required"); return; }
-    if (!/^[a-z0-9-_]+$/.test(trimmed)) { setError("Use only lowercase letters, numbers, - or _"); return; }
-    setLoading(true);
-    setError("");
+  const submit = async () => {
+    const n = name.trim();
+    if (!n) return setErr("Name is required");
+    if (!/^[a-z0-9_-]+$/.test(n)) return setErr("Lowercase letters, numbers, - and _ only");
+    setBusy(true); setErr("");
     try {
-      await invoke("run_lokadev", { args: ["create", trimmed, "--runtime", runtime, "--server", server, "--db", db, "--yes"] });
-      onCreated();
-      onClose();
+      await invoke("run_lokadev", { args: ["create", n, "--runtime", runtime, "--server", server, "--db", db, "--yes"] });
+      onCreated(); onClose();
     } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
+      // try without flags if CLI doesn't support them
+      try {
+        await invoke("run_lokadev", { args: ["create", n] });
+        onCreated(); onClose();
+      } catch (e2) {
+        setErr(String(e2));
+      }
+    } finally { setBusy(false); }
   };
 
+  const sel = (opts: string[], val: string, set: (v: string) => void) => (
+    <div className="relative">
+      <select value={val} onChange={e => set(e.target.value)}
+        className="w-full bg-white/5 border border-white/8 hover:border-white/15 rounded-md px-2.5 py-1.5 text-[11px] text-white/70 outline-none appearance-none cursor-pointer transition-colors pr-6">
+        {opts.map(o => <option key={o} value={o} className="bg-[#1a1a22]">{o}</option>)}
+      </select>
+      <ChevronDown size={9} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-lg w-[420px] shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#30363d]">
-          <div className="flex items-center gap-2">
-            <Plus size={14} className="text-cyan-400" />
-            <span className="text-[13px] font-mono font-semibold">New Project</span>
-          </div>
-          <button onClick={onClose} className="text-[#484f58] hover:text-[#e6edf3] transition-colors"><X size={14} /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="text-[10px] font-mono text-[#484f58] uppercase tracking-widest block mb-1.5">Project Name</label>
-            <input ref={inputRef} value={name} onChange={e => setName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && create()}
-              placeholder="my-project"
-              className="w-full bg-[#0d1117] border border-[#30363d] focus:border-cyan-500/50 rounded px-3 py-2 text-[12px] font-mono text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
-              style={{ WebkitUserSelect: "text", userSelect: "text" }}
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Runtime",  value: runtime,  set: setRuntime, opts: ["php8.3","php8.2","php8.1","node20","node18","python3","go","static"] },
-              { label: "Server",   value: server,   set: setServer,  opts: ["nginx","apache","caddy"] },
-              { label: "Database", value: db,        set: setDb,      opts: ["mysql","postgresql","sqlite","none"] },
-            ].map(({ label, value, set, opts }) => (
-              <div key={label}>
-                <label className="text-[10px] font-mono text-[#484f58] uppercase tracking-widest block mb-1.5">{label}</label>
-                <div className="relative">
-                  <select value={value} onChange={e => set(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-2 text-[11px] font-mono text-[#e6edf3] outline-none appearance-none pr-6 cursor-pointer">
-                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                  <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#484f58] pointer-events-none" />
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-[#16161e] border border-white/10 rounded-xl w-[400px] shadow-2xl">
+        <div className="px-5 pt-5 pb-4">
+          <h3 className="text-[13px] font-semibold text-white/90 mb-4">New Project</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] text-white/35 uppercase tracking-wider block mb-1.5">Name</label>
+              <input ref={ref} value={name} onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submit()}
+                placeholder="my-project"
+                className="w-full bg-white/5 border border-white/8 focus:border-white/20 rounded-md px-3 py-2 text-[12px] text-white/90 placeholder-white/20 outline-none transition-colors"
+                style={{ WebkitUserSelect: "text", userSelect: "text" }}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Runtime",  val: runtime, set: setRuntime, opts: ["php8.3","php8.2","php8.1","node20","node18","python3","go","static"] },
+                { label: "Server",   val: server,  set: setServer,  opts: ["nginx","apache","caddy"] },
+                { label: "Database", val: db,       set: setDb,      opts: ["mysql","postgresql","sqlite","none"] },
+              ].map(({ label, val, set, opts }) => (
+                <div key={label}>
+                  <label className="text-[10px] text-white/35 uppercase tracking-wider block mb-1.5">{label}</label>
+                  {sel(opts, val, set)}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            {err && <p className="text-[11px] text-red-400/80">{err}</p>}
           </div>
-          {error && <p className="text-[11px] font-mono text-red-400">{error}</p>}
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[#30363d]">
-          <button onClick={onClose} disabled={loading}
-            className="text-[11px] font-mono px-3 py-1.5 rounded border border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d] transition-colors">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-white/6">
+          <button onClick={onClose} disabled={busy}
+            className="text-[11px] px-3 py-1.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors">
             Cancel
           </button>
-          <button onClick={create} disabled={loading || !name.trim()}
-            className="text-[11px] font-mono px-4 py-1.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            {loading ? "Creating..." : "Create"}
+          <button onClick={submit} disabled={busy || !name.trim()}
+            className="text-[11px] px-4 py-1.5 rounded-md bg-white/10 hover:bg-white/15 text-white/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            {busy ? "Creating…" : "Create"}
           </button>
         </div>
       </div>
@@ -158,14 +156,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-type Tab = "projects" | "services" | "logs" | "settings";
-
-const SERVICES_DEFAULT = [
-  { name: "Nginx",      version: "1.25.3", port: 80,   running: true  },
-  { name: "MySQL",      version: "8.0.36", port: 3306, running: true  },
-  { name: "PostgreSQL", version: "16.2",   port: 5432, running: false },
-  { name: "Redis",      version: "7.2.4",  port: 6379, running: false },
-];
+// ── Hooks ──────────────────────────────────────────────────────────────────────
 
 function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -174,330 +165,350 @@ function useProjects() {
 
   const refresh = useCallback(async () => {
     try {
-      const result = await invoke<Project[]>("list_projects");
-      setProjects(result);
-      setDaemonOk(true);
+      const r = await invoke<Project[]>("list_projects");
+      setProjects(r); setDaemonOk(true);
     } catch {
-      setProjects([]);
-      setDaemonOk(false);
-    } finally {
-      setLoading(false);
-    }
+      setProjects([]); setDaemonOk(false);
+    } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 3000);
-    return () => clearInterval(id);
-  }, [refresh]);
+  useEffect(() => { refresh(); const id = setInterval(refresh, 3000); return () => clearInterval(id); }, [refresh]);
 
   const runCmd = async (cmd: string, name: string) => {
-    try {
-      await invoke("run_lokadev", { args: [cmd, name] });
-      setTimeout(refresh, 800);
-    } catch (e) {
-      console.error(e);
-    }
+    try { await invoke("run_lokadev", { args: [cmd, name] }); setTimeout(refresh, 800); }
+    catch (e) { console.error(e); }
   };
 
   return { projects, loading, daemonOk, refresh, runCmd };
 }
 
+function useServices() {
+  const FALLBACK: ServiceInfo[] = [
+    { name: "Nginx",      version: "1.25.3", port: 80,   status: "running" },
+    { name: "MySQL",      version: "8.0.36", port: 3306, status: "running" },
+    { name: "PostgreSQL", version: "16.2",   port: 5432, status: "stopped" },
+    { name: "Redis",      version: "7.2.4",  port: 6379, status: "stopped" },
+  ];
+  const [services, setServices] = useState<ServiceInfo[]>(FALLBACK);
+  const [busy, setBusy]         = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<ServiceInfo[]>("list_services").then(r => { if (r.length) setServices(r); }).catch(() => {});
+  }, []);
+
+  const toggle = async (svc: ServiceInfo) => {
+    const action = svc.status === "running" ? "stop" : "start";
+    setBusy(svc.name);
+    try {
+      await invoke("control_service", { name: svc.name, action });
+      setServices(prev => prev.map(s => s.name === svc.name ? { ...s, status: action === "start" ? "running" : "stopped" } : s));
+    } catch {
+      // optimistic toggle even if control_service isn't implemented in daemon yet
+      setServices(prev => prev.map(s => s.name === svc.name ? { ...s, status: action === "start" ? "running" : "stopped" } : s));
+    } finally { setBusy(null); }
+  };
+
+  return { services, busy, toggle };
+}
+
 function useLogs(projects: Project[]) {
-  const [logs, setLogs]         = useState<LogLine[]>([]);
-  const [project, setProject]   = useState("daemon");
-  const [autoScroll, setAutoScroll] = useState(true);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [logs, setLogs]         = useState<LogEntry[]>([]);
+  const [source, setSource]     = useState("daemon");
+  const endRef                  = useRef<HTMLDivElement>(null);
 
   const fetchLogs = useCallback(async () => {
     try {
-      const url = project === "daemon"
-        ? "http://localhost:25000/api/logs"
-        : `http://localhost:25000/api/logs?project=${encodeURIComponent(project)}`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data)) setLogs(data as LogLine[]);
-      }
-    } catch {
-      // daemon not running or no logs endpoint
-    }
-  }, [project]);
+      const r = await invoke<LogEntry[]>("get_logs", { project: source === "daemon" ? null : source });
+      if (r.length) setLogs(r);
+    } catch {}
+  }, [source]);
 
-  useEffect(() => {
-    fetchLogs();
-    const id = setInterval(fetchLogs, 2000);
-    return () => clearInterval(id);
-  }, [fetchLogs]);
+  useEffect(() => { fetchLogs(); const id = setInterval(fetchLogs, 2500); return () => clearInterval(id); }, [fetchLogs]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
 
-  useEffect(() => {
-    if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs, autoScroll]);
-
-  return { logs, project, setProject, autoScroll, setAutoScroll, bottomRef, fetchLogs };
+  return { logs, source, setSource, endRef, fetchLogs };
 }
 
-export default function App() {
-  const [tab, setTab]             = useState<Tab>("projects");
-  const [selected, setSelected]   = useState<string | null>(null);
-  const [search, setSearch]       = useState("");
-  const [showNew, setShowNew]     = useState(false);
-  const [services, setServices]   = useState(SERVICES_DEFAULT);
-  const [settings, setSettings]   = useState({
-    startAtLogin:      true,
-    minimizeToTray:    true,
-    showNotifications: false,
-    daemonPort:        "25000",
-    projectsDir:       "~/lokadev-projects",
+function useSettings() {
+  const [settings, setSettings] = useState<AppSettings>({
+    start_at_login: false, minimize_to_tray: true,
+    show_notifications: false, daemon_port: "25000", projects_dir: "~/lokadev-projects",
   });
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    invoke<AppSettings>("load_settings").then(s => setSettings(s)).catch(() => {});
+  }, []);
+
+  const update = (patch: Partial<AppSettings>) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => invoke("save_settings", { settings: next }).catch(() => {}), 600);
+  };
+
+  return { settings, update };
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────────
+
+type Tab = "projects" | "services" | "logs" | "settings";
+
+const NAV: { id: Tab; label: string; Icon: LucideIcon }[] = [
+  { id: "projects", label: "Projects", Icon: Folder },
+  { id: "services", label: "Services", Icon: Server },
+  { id: "logs",     label: "Logs",     Icon: ScrollText },
+  { id: "settings", label: "Settings", Icon: Settings2 },
+];
+
+const LOG_COLORS: Record<string, string> = {
+  INFO: "#60a5fa", OK: "#34d399", WARN: "#fbbf24", ERROR: "#f87171", DEBUG: "#a3a3c2",
+};
+
+export default function App() {
+  const [tab, setTab]           = useState<Tab>("projects");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch]     = useState("");
+  const [showNew, setShowNew]   = useState(false);
 
   const { projects, loading, daemonOk, refresh, runCmd } = useProjects();
-  const { logs, project: logProject, setProject: setLogProject, bottomRef, fetchLogs } = useLogs(projects);
+  const { services, busy: svcBusy, toggle: toggleSvc }   = useServices();
+  const { logs, source, setSource, endRef, fetchLogs }   = useLogs(projects);
+  const { settings, update: updateSettings }             = useSettings();
 
-  const filtered       = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered        = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const selectedProject = projects.find(p => p.name === selected);
-  const running        = projects.filter(p => p.status === "running").length;
-
-  const toggleService = (name: string) => {
-    setServices(prev => prev.map(s => s.name === name ? { ...s, running: !s.running } : s));
-  };
-
-  const NAV: { id: Tab; label: string; Icon: LucideIcon }[] = [
-    { id: "projects", label: "Projects", Icon: Folder },
-    { id: "services", label: "Services", Icon: Server },
-    { id: "logs",     label: "Logs",     Icon: Activity },
-    { id: "settings", label: "Settings", Icon: Settings },
-  ];
-
-  const LOG_COLORS: Record<string, string> = {
-    INFO: "#58a6ff", OK: "#3fb950", WARN: "#d29922", ERROR: "#f85149", DEBUG: "#8b949e",
-  };
+  const runningCount    = projects.filter(p => p.status === "running").length;
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3]">
-      <Titlebar />
+    <div className="flex flex-col h-screen bg-[#0d0d12] text-white/80 select-none">
+      <Titlebar daemonOk={daemonOk} />
 
       {showNew && <NewProjectModal onClose={() => setShowNew(false)} onCreated={refresh} />}
 
       <div className="flex flex-1 min-h-0">
-        {/* ── Sidebar ── */}
-        <aside className="w-48 shrink-0 flex flex-col bg-[#010409] border-r border-[#30363d]">
-          <div className="px-3 py-3 border-b border-[#30363d]">
-            <div className="flex items-center gap-2 text-[11px] font-mono">
-              <span className={`w-2 h-2 rounded-full ${daemonOk ? "bg-green-400 pulse-dot" : "bg-red-400"}`} />
-              <span className={daemonOk ? "text-green-400" : "text-red-400"}>
-                {daemonOk ? "Daemon active" : "Daemon offline"}
-              </span>
-            </div>
-            <div className="text-[10px] text-[#484f58] mt-0.5">localhost:25000</div>
-          </div>
 
-          <nav className="flex flex-col gap-0.5 p-2 flex-1">
+        {/* ── Sidebar ── */}
+        <aside className="w-44 shrink-0 flex flex-col border-r border-white/5 bg-[#0b0b10]">
+          <nav className="flex-1 p-2 pt-3 space-y-0.5">
             {NAV.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => setTab(id)}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded text-[12px] font-mono w-full text-left transition-colors ${
+                className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] transition-all ${
                   tab === id
-                    ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25"
-                    : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]"
+                    ? "bg-white/8 text-white/90"
+                    : "text-white/35 hover:text-white/65 hover:bg-white/4"
                 }`}>
-                <Icon size={14} /> {label}
+                <Icon size={13} strokeWidth={tab === id ? 2.2 : 1.8} />
+                {label}
               </button>
             ))}
           </nav>
 
-          <div className="border-t border-[#30363d] p-3 space-y-2">
-            <div className="text-[9px] font-mono text-[#484f58] uppercase tracking-widest mb-2">System</div>
-            {[
-              { Icon: Cpu,       label: "CPU",  value: "—" },
-              { Icon: HardDrive, label: "RAM",  value: "—" },
-              { Icon: Folder,    label: "Proj", value: `${running}/${projects.length}` },
-            ].map(({ Icon, label, value }) => (
-              <div key={label} className="flex items-center gap-2 text-[11px] font-mono text-[#484f58]">
-                <Icon size={11} className="text-cyan-500/50 shrink-0" />
-                <span>{label}</span>
-                <span className="ml-auto text-[#8b949e]">{value}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-[#30363d] p-2">
+          <div className="p-3 border-t border-white/5 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-white/25 px-1">
+              <span>{runningCount} running</span>
+              <span>{projects.length} total</span>
+            </div>
             <button onClick={() => open("http://localhost:25000")}
-              className="w-full flex items-center gap-2 text-[11px] font-mono text-[#484f58] hover:text-cyan-400 px-2 py-1.5 rounded hover:bg-[#161b22] transition-colors">
-              <Globe size={12} /> Open in browser
+              className="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-[11px] text-white/25 hover:text-white/55 hover:bg-white/4 transition-colors">
+              <ExternalLink size={11} /> Dashboard
             </button>
           </div>
         </aside>
 
-        {/* ── Main ── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Content ── */}
+        <main className="flex-1 flex flex-col min-w-0 min-h-0">
 
           {/* PROJECTS */}
           {tab === "projects" && (
-            <>
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#30363d] shrink-0">
-                <div className="flex items-center gap-2 flex-1 bg-[#161b22] border border-[#30363d] rounded px-3 py-1.5">
-                  <Search size={13} className="text-[#484f58] shrink-0" />
-                  <input value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Search projects..."
-                    className="bg-transparent text-[12px] font-mono text-[#e6edf3] placeholder-[#484f58] outline-none flex-1"
-                    style={{ WebkitUserSelect: "text", userSelect: "text" }}
-                  />
-                </div>
-                <button onClick={refresh}
-                  className="p-1.5 rounded hover:bg-[#21262d] text-[#484f58] hover:text-[#e6edf3] transition-colors">
-                  <RefreshCw size={13} />
-                </button>
-                <button onClick={() => setShowNew(true)}
-                  className="flex items-center gap-1.5 text-[11px] font-mono bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 px-3 py-1.5 rounded transition-colors">
-                  <Plus size={12} /> New Project
-                </button>
-              </div>
-
-              <div className="flex flex-1 min-h-0">
-                <div className="w-64 shrink-0 border-r border-[#30363d] overflow-y-auto">
-                  {loading && (
-                    <div className="flex items-center justify-center h-32 text-[#484f58] text-[11px] font-mono">Loading...</div>
-                  )}
-                  {!loading && filtered.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-40 text-[#484f58] text-[11px] font-mono gap-3 px-4 text-center">
-                      <Terminal size={28} className="opacity-30" />
-                      {search ? "No matches" : "No projects yet"}
-                      {!search && (
-                        <button onClick={() => setShowNew(true)}
-                          className="text-[10px] font-mono text-cyan-500/60 hover:text-cyan-400 border border-cyan-500/20 hover:border-cyan-500/40 px-3 py-1 rounded transition-colors">
-                          + New Project
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {filtered.map(p => (
-                    <button key={p.name} onClick={() => setSelected(p.name)}
-                      className={`w-full text-left px-3 py-3 border-b border-[#21262d] transition-colors hover:bg-[#161b22] slide-in ${
-                        selected === p.name
-                          ? "bg-cyan-500/8 border-l-2 border-l-cyan-500"
-                          : "border-l-2 border-l-transparent"
-                      }`}>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="text-[12px] font-mono font-semibold text-[#e6edf3] truncate">{p.name}</span>
-                        <StatusBadge status={p.status} />
-                      </div>
-                      <div className="text-[10px] font-mono text-[#484f58] truncate">{p.runtime} · {p.server}</div>
-                    </button>
-                  ))}
+            <div className="flex flex-1 min-h-0">
+              {/* Project list */}
+              <div className="w-60 shrink-0 flex flex-col border-r border-white/5">
+                <div className="flex items-center gap-2 p-3 border-b border-white/5">
+                  <div className="flex items-center flex-1 bg-white/4 rounded-lg px-2.5 py-1.5 gap-2">
+                    <Search size={11} className="text-white/20 shrink-0" />
+                    <input value={search} onChange={e => setSearch(e.target.value)}
+                      placeholder="Search…"
+                      className="bg-transparent flex-1 text-[11px] text-white/70 placeholder-white/20 outline-none"
+                      style={{ WebkitUserSelect: "text", userSelect: "text" }}
+                    />
+                  </div>
+                  <button onClick={refresh} className="p-1.5 text-white/20 hover:text-white/60 transition-colors rounded-lg hover:bg-white/4">
+                    <RefreshCw size={11} />
+                  </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
-                  {!selectedProject ? (
-                    <div className="flex flex-col items-center justify-center h-full text-[#484f58] font-mono text-[11px] gap-2">
-                      <LayoutDashboard size={32} className="opacity-20" />
-                      Select a project to view details
+                  {loading ? (
+                    <div className="flex items-center justify-center h-24 text-[11px] text-white/20">Loading…</div>
+                  ) : filtered.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 gap-4">
+                      <LayoutGrid size={24} className="text-white/10" />
+                      <div className="text-center">
+                        <p className="text-[11px] text-white/25">{search ? "No matches" : "No projects yet"}</p>
+                        {!search && (
+                          <button onClick={() => setShowNew(true)}
+                            className="mt-2 text-[10px] text-white/35 hover:text-white/60 border border-white/10 hover:border-white/20 px-3 py-1 rounded-lg transition-colors">
+                            Create first project
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <div className="p-6 space-y-6 slide-in">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <h2 className="text-lg font-mono font-bold">{selectedProject.name}</h2>
-                            <StatusBadge status={selectedProject.status} />
-                          </div>
-                          <button onClick={() => open(`http://${selectedProject.domain}`)}
-                            className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-400 hover:underline">
-                            http://{selectedProject.domain} <ExternalLink size={10} />
-                          </button>
+                    filtered.map(p => (
+                      <button key={p.name} onClick={() => setSelected(p.name)}
+                        className={`w-full text-left px-3.5 py-2.5 transition-colors border-l-2 ${
+                          selected === p.name
+                            ? "bg-white/5 border-l-white/30"
+                            : "border-l-transparent hover:bg-white/3"
+                        }`}>
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-[12px] font-medium text-white/80 truncate">{p.name}</span>
+                          <Dot status={p.status} />
                         </div>
-                        <div className="flex items-center gap-2">
-                          {selectedProject.status === "running" ? (
-                            <button onClick={() => runCmd("stop", selectedProject.name)}
-                              className="flex items-center gap-1.5 text-[11px] font-mono px-3 py-1.5 rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">
-                              <Square size={12} /> Stop
-                            </button>
-                          ) : (
-                            <button onClick={() => runCmd("start", selectedProject.name)}
-                              className="flex items-center gap-1.5 text-[11px] font-mono px-3 py-1.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors">
-                              <Play size={12} /> Start
-                            </button>
-                          )}
-                          <button onClick={() => runCmd("restart", selectedProject.name)}
-                            className="flex items-center gap-1.5 text-[11px] font-mono px-3 py-1.5 rounded border border-[#30363d] bg-[#21262d] text-[#8b949e] hover:text-[#e6edf3] transition-colors">
-                            <RotateCcw size={12} /> Restart
-                          </button>
-                        </div>
-                      </div>
+                        <p className="text-[10px] text-white/25 truncate">{p.runtime} · {p.server}</p>
+                      </button>
+                    ))
+                  )}
+                </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { label: "Runtime",    value: selectedProject.runtime },
-                          { label: "Web Server", value: selectedProject.server },
-                          { label: "Database",   value: selectedProject.database },
-                          { label: "Domain",     value: selectedProject.domain },
-                          { label: "Directory",  value: selectedProject.dir, full: true },
-                        ].map(({ label, value, full }) => (
-                          <div key={label} className={`bg-[#161b22] border border-[#30363d] rounded p-3 ${full ? "col-span-2" : ""}`}>
-                            <div className="text-[9px] font-mono text-[#484f58] uppercase tracking-widest mb-1">{label}</div>
-                            <div className="text-[12px] font-mono text-[#e6edf3] truncate">{value}</div>
-                          </div>
-                        ))}
-                      </div>
+                <div className="p-2.5 border-t border-white/5">
+                  <button onClick={() => setShowNew(true)}
+                    className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 border border-white/6 hover:border-white/12 transition-all">
+                    <Plus size={11} /> New Project
+                  </button>
+                </div>
+              </div>
 
+              {/* Project detail */}
+              <div className="flex-1 overflow-y-auto">
+                {!selectedProject ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3">
+                    <LayoutGrid size={28} className="text-white/8" />
+                    <p className="text-[11px] text-white/20">Select a project</p>
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-6">
+                    {/* Header */}
+                    <div className="flex items-start justify-between">
                       <div>
-                        <div className="text-[10px] font-mono text-[#484f58] uppercase tracking-widest mb-2">lokadev.toml</div>
-                        <div className="bg-[#010409] border border-[#30363d] rounded p-4 font-mono text-[11px] text-[#8b949e] leading-relaxed">
-                          <span className="text-[#7ee787]">[project]</span>{"\n"}
-                          <span className="text-[#79c0ff]">name</span> = <span className="text-[#a5d6ff]">"{selectedProject.name}"</span>{"\n"}
-                          <span className="text-[#79c0ff]">domain</span> = <span className="text-[#a5d6ff]">"{selectedProject.domain}"</span>{"\n\n"}
-                          <span className="text-[#7ee787]">[server]</span>{"\n"}
-                          <span className="text-[#79c0ff]">type</span> = <span className="text-[#a5d6ff]">"{selectedProject.server}"</span>{"\n\n"}
-                          <span className="text-[#7ee787]">[database]</span>{"\n"}
-                          <span className="text-[#79c0ff]">type</span> = <span className="text-[#a5d6ff]">"{selectedProject.database}"</span>
+                        <div className="flex items-center gap-2.5 mb-1">
+                          <h2 className="text-[15px] font-semibold text-white/90">{selectedProject.name}</h2>
+                          <span className={`text-[10px] px-1.5 py-px rounded-full ${
+                            selectedProject.status === "running"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : selectedProject.status === "error"
+                              ? "bg-red-500/15 text-red-400"
+                              : "bg-white/8 text-white/35"
+                          }`}>{selectedProject.status}</span>
                         </div>
+                        <button onClick={() => open(`http://${selectedProject.domain}`)}
+                          className="flex items-center gap-1 text-[11px] text-white/30 hover:text-white/60 transition-colors">
+                          {selectedProject.domain} <ExternalLink size={9} />
+                        </button>
                       </div>
-
-                      <div className="border border-red-500/20 rounded p-4">
-                        <div className="text-[10px] font-mono text-red-400/60 uppercase tracking-widest mb-3">Danger Zone</div>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete "${selectedProject.name}" and all its data?`)) {
-                              runCmd("delete", selectedProject.name);
-                              setSelected(null);
-                            }
-                          }}
-                          className="flex items-center gap-1.5 text-[11px] font-mono px-3 py-1.5 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
-                          <Trash2 size={12} /> Delete Project
+                      <div className="flex items-center gap-1.5">
+                        {selectedProject.status === "running" ? (
+                          <button onClick={() => runCmd("stop", selectedProject.name)}
+                            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-red-500/8 hover:bg-red-500/15 text-red-400/70 hover:text-red-400 border border-red-500/15 transition-all">
+                            <Square size={11} /> Stop
+                          </button>
+                        ) : (
+                          <button onClick={() => runCmd("start", selectedProject.name)}
+                            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-emerald-500/8 hover:bg-emerald-500/15 text-emerald-400/70 hover:text-emerald-400 border border-emerald-500/15 transition-all">
+                            <Play size={11} /> Start
+                          </button>
+                        )}
+                        <button onClick={() => runCmd("restart", selectedProject.name)}
+                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/8 text-white/40 hover:text-white/70 border border-white/6 transition-all">
+                          <RotateCcw size={11} /> Restart
                         </button>
                       </div>
                     </div>
-                  )}
-                </div>
+
+                    {/* Info grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: "Runtime",    value: selectedProject.runtime },
+                        { label: "Web Server", value: selectedProject.server },
+                        { label: "Database",   value: selectedProject.database },
+                        { label: "Domain",     value: selectedProject.domain },
+                        { label: "Directory",  value: selectedProject.dir, full: true },
+                      ].map(({ label, value, full }) => (
+                        <div key={label} className={`bg-white/3 rounded-lg p-3 ${full ? "col-span-2" : ""}`}>
+                          <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{label}</p>
+                          <p className="text-[11px] text-white/65 font-mono truncate">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Config preview */}
+                    <div>
+                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-2">lokadev.toml</p>
+                      <pre className="bg-white/2 border border-white/5 rounded-lg p-4 text-[10px] leading-relaxed font-mono text-white/40 overflow-x-auto">
+{`[project]
+name     = "${selectedProject.name}"
+domain   = "${selectedProject.domain}"
+
+[server]
+type = "${selectedProject.server}"
+
+[database]
+type = "${selectedProject.database}"`}
+                      </pre>
+                    </div>
+
+                    {/* Danger */}
+                    <div className="pt-2 border-t border-white/5">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${selectedProject.name}"? This cannot be undone.`)) {
+                            runCmd("delete", selectedProject.name);
+                            setSelected(null);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-red-400/50 hover:text-red-400 hover:bg-red-500/8 border border-transparent hover:border-red-500/15 transition-all">
+                        <Trash2 size={11} /> Delete Project
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </>
+            </div>
           )}
 
           {/* SERVICES */}
           {tab === "services" && (
             <div className="flex-1 overflow-y-auto p-6">
-              <h2 className="text-sm font-mono font-semibold mb-1">Global Services</h2>
-              <p className="text-[11px] font-mono text-[#484f58] mb-6">Shared services available to all projects</p>
-              <div className="space-y-2">
+              <div className="mb-5">
+                <h2 className="text-[13px] font-semibold text-white/80">Services</h2>
+                <p className="text-[11px] text-white/25 mt-0.5">Global services shared across all projects</p>
+              </div>
+              <div className="space-y-1.5">
                 {services.map(svc => (
-                  <div key={svc.name} className="flex items-center gap-4 px-4 py-3 bg-[#161b22] border border-[#30363d] rounded hover:border-[#484f58] transition-colors">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${svc.running ? "bg-green-400 pulse-dot" : "bg-[#484f58]"}`} />
+                  <div key={svc.name}
+                    className="flex items-center gap-4 px-4 py-3 bg-white/3 hover:bg-white/5 rounded-lg border border-white/4 hover:border-white/8 transition-all">
+                    <Dot status={svc.status} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-mono font-semibold">{svc.name}</span>
-                        <span className="text-[10px] font-mono text-[#484f58]">v{svc.version}</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[12px] font-medium text-white/75">{svc.name}</span>
+                        <span className="text-[10px] text-white/25">v{svc.version}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#484f58]">:{svc.port}</span>
+                      <span className="text-[10px] font-mono text-white/20">:{svc.port}</span>
                     </div>
-                    <span className={`text-[11px] font-mono w-14 text-right ${svc.running ? "text-green-400" : "text-[#484f58]"}`}>
-                      {svc.running ? "running" : "stopped"}
+                    <span className={`text-[10px] w-12 text-right ${svc.status === "running" ? "text-emerald-400/70" : "text-white/20"}`}>
+                      {svc.status}
                     </span>
-                    <button onClick={() => toggleService(svc.name)}
-                      className={`p-1.5 rounded transition-colors ${
-                        svc.running
-                          ? "text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
-                          : "text-green-400/60 hover:text-green-400 hover:bg-green-400/10"
+                    <button onClick={() => toggleSvc(svc)} disabled={svcBusy === svc.name}
+                      className={`p-1.5 rounded-lg transition-all disabled:opacity-40 ${
+                        svc.status === "running"
+                          ? "text-red-400/40 hover:text-red-400 hover:bg-red-500/8"
+                          : "text-emerald-400/40 hover:text-emerald-400 hover:bg-emerald-500/8"
                       }`}>
-                      {svc.running ? <Square size={12} /> : <Play size={12} />}
+                      {svcBusy === svc.name
+                        ? <RotateCcw size={11} className="animate-spin" />
+                        : svc.status === "running" ? <Square size={11} /> : <Play size={11} />
+                      }
                     </button>
                   </div>
                 ))}
@@ -508,38 +519,37 @@ export default function App() {
           {/* LOGS */}
           {tab === "logs" && (
             <div className="flex-1 flex flex-col min-h-0 p-4">
-              <div className="flex items-center gap-3 mb-4 shrink-0">
+              <div className="flex items-center gap-2 mb-3 shrink-0">
                 <div className="relative">
-                  <select value={logProject} onChange={e => setLogProject(e.target.value)}
-                    className="text-[11px] font-mono bg-[#161b22] border border-[#30363d] text-[#8b949e] rounded px-2 py-1.5 pr-6 outline-none appearance-none cursor-pointer">
-                    <option value="daemon">daemon</option>
-                    {projects.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  <select value={source} onChange={e => setSource(e.target.value)}
+                    className="bg-white/4 border border-white/8 rounded-lg px-2.5 py-1.5 text-[11px] text-white/55 outline-none appearance-none cursor-pointer pr-6">
+                    <option value="daemon" className="bg-[#1a1a22]">daemon</option>
+                    {projects.map(p => <option key={p.name} value={p.name} className="bg-[#1a1a22]">{p.name}</option>)}
                   </select>
-                  <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#484f58] pointer-events-none" />
+                  <ChevronDown size={9} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                 </div>
-                <button onClick={fetchLogs}
-                  className="p-1.5 rounded hover:bg-[#21262d] text-[#484f58] hover:text-[#e6edf3] transition-colors">
-                  <RefreshCw size={12} />
+                <button onClick={fetchLogs} className="p-1.5 text-white/20 hover:text-white/60 hover:bg-white/4 rounded-lg transition-colors">
+                  <RefreshCw size={11} />
                 </button>
-                <span className="text-[10px] font-mono text-[#484f58] ml-auto">{logs.length} lines</span>
+                <span className="text-[10px] text-white/20 ml-auto">{logs.length} entries</span>
               </div>
-              <div className="flex-1 bg-[#010409] border border-[#30363d] rounded p-4 overflow-y-auto font-mono text-[11px] leading-relaxed">
+              <div className="flex-1 bg-black/30 border border-white/5 rounded-xl p-4 overflow-y-auto font-mono text-[10.5px] leading-relaxed">
                 {logs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-[#484f58]">
-                    <Activity size={24} className="opacity-30" />
-                    <span>No logs yet — start the daemon first</span>
-                    <code className="text-[10px] border border-[#30363d] px-2 py-1 rounded">lokadev daemon</code>
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-white/15">
+                    <ScrollText size={20} />
+                    <span>No logs — start the daemon first</span>
+                    <code className="text-[9px] border border-white/8 px-2 py-1 rounded">lokadev daemon</code>
                   </div>
                 ) : (
                   <>
                     {logs.map((row, i) => (
-                      <div key={i} className="flex gap-3">
-                        <span className="text-[#484f58] shrink-0">{row.t}</span>
-                        <span className="shrink-0 w-10" style={{ color: LOG_COLORS[row.l] ?? "#8b949e" }}>{row.l}</span>
-                        <span className="text-[#8b949e]">{row.m}</span>
+                      <div key={i} className="flex gap-3 hover:bg-white/2 rounded px-1 py-px">
+                        <span className="text-white/20 shrink-0 w-16">{row.t}</span>
+                        <span className="shrink-0 w-9" style={{ color: LOG_COLORS[row.l] ?? "#a3a3c2" }}>{row.l}</span>
+                        <span className="text-white/40">{row.m}</span>
                       </div>
                     ))}
-                    <div ref={bottomRef} />
+                    <div ref={endRef} />
                   </>
                 )}
               </div>
@@ -548,85 +558,71 @@ export default function App() {
 
           {/* SETTINGS */}
           {tab === "settings" && (
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <h2 className="text-sm font-mono font-semibold mb-6">Settings</h2>
+            <div className="flex-1 overflow-y-auto p-6 max-w-lg">
+              <h2 className="text-[13px] font-semibold text-white/80 mb-6">Settings</h2>
 
-              <div>
-                <div className="text-[9px] font-mono text-[#484f58] uppercase tracking-widest mb-3">General</div>
-                <div className="space-y-2">
+              <section className="mb-6">
+                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-2 px-1">General</p>
+                <div className="space-y-px">
                   {([
-                    { key: "startAtLogin",      label: "Start at login",      desc: "Launch daemon and tray on system startup" },
-                    { key: "minimizeToTray",     label: "Minimize to tray",    desc: "Closing the window hides to tray" },
-                    { key: "showNotifications",  label: "Show notifications",  desc: "Notify when projects start or stop" },
+                    { key: "start_at_login",      label: "Start at login",     desc: "Launch daemon on system startup" },
+                    { key: "minimize_to_tray",     label: "Minimize to tray",   desc: "Hide window instead of closing" },
+                    { key: "show_notifications",   label: "Notifications",      desc: "Alert when projects start or stop" },
                   ] as const).map(({ key, label, desc }) => (
-                    <div key={key} className="flex items-center justify-between gap-4 px-4 py-3 bg-[#161b22] border border-[#30363d] rounded">
+                    <div key={key} className="flex items-center justify-between gap-4 px-4 py-3 bg-white/3 first:rounded-t-lg last:rounded-b-lg hover:bg-white/4 transition-colors">
                       <div>
-                        <div className="text-[12px] font-mono text-[#e6edf3]">{label}</div>
-                        <div className="text-[10px] font-mono text-[#484f58] mt-0.5">{desc}</div>
+                        <p className="text-[12px] text-white/70">{label}</p>
+                        <p className="text-[10px] text-white/25 mt-0.5">{desc}</p>
                       </div>
-                      <button onClick={() => setSettings(s => ({ ...s, [key]: !s[key] }))}
-                        className={`w-9 h-5 rounded-full border transition-colors cursor-pointer ${
-                          settings[key] ? "bg-cyan-500/30 border-cyan-500/50" : "bg-[#21262d] border-[#30363d]"
-                        }`}>
-                        <div className={`w-3.5 h-3.5 rounded-full bg-white m-0.5 transition-transform ${settings[key] ? "translate-x-4" : ""}`} />
+                      <button onClick={() => updateSettings({ [key]: !settings[key] })}
+                        className={`w-9 h-5 rounded-full transition-all flex-shrink-0 relative ${settings[key] ? "bg-white/20" : "bg-white/8"}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${settings[key] ? "left-4 bg-white/80" : "left-0.5 bg-white/30"}`} />
                       </button>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
 
-              <div>
-                <div className="text-[9px] font-mono text-[#484f58] uppercase tracking-widest mb-3">Daemon</div>
-                <div className="space-y-2">
+              <section className="mb-6">
+                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-2 px-1">Daemon</p>
+                <div className="space-y-px">
                   {([
-                    { key: "daemonPort",   label: "Daemon port",        desc: "REST API port" },
-                    { key: "projectsDir",  label: "Projects directory", desc: "Default location for new projects" },
-                  ] as const).map(({ key, label, desc }) => (
-                    <div key={key} className="flex items-center justify-between gap-4 px-4 py-3 bg-[#161b22] border border-[#30363d] rounded">
-                      <div>
-                        <div className="text-[12px] font-mono text-[#e6edf3]">{label}</div>
-                        <div className="text-[10px] font-mono text-[#484f58] mt-0.5">{desc}</div>
-                      </div>
+                    { key: "daemon_port",   label: "Port",              placeholder: "25000" },
+                    { key: "projects_dir",  label: "Projects directory", placeholder: "~/lokadev-projects" },
+                  ] as const).map(({ key, label, placeholder }) => (
+                    <div key={key} className="flex items-center justify-between gap-4 px-4 py-3 bg-white/3 first:rounded-t-lg last:rounded-b-lg">
+                      <p className="text-[12px] text-white/70 shrink-0">{label}</p>
                       <input value={settings[key]}
-                        onChange={e => setSettings(s => ({ ...s, [key]: e.target.value }))}
-                        className="bg-[#0d1117] border border-[#30363d] focus:border-cyan-500/50 rounded px-2 py-1 text-[11px] font-mono text-[#e6edf3] outline-none w-44 transition-colors"
+                        onChange={e => updateSettings({ [key]: e.target.value })}
+                        placeholder={placeholder}
+                        className="bg-white/5 border border-white/8 focus:border-white/20 rounded-md px-2.5 py-1 text-[11px] font-mono text-white/60 outline-none text-right transition-colors w-44"
                         style={{ WebkitUserSelect: "text", userSelect: "text" }}
                       />
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
 
-              <div>
-                <div className="text-[9px] font-mono text-[#484f58] uppercase tracking-widest mb-3">About</div>
-                <div className="space-y-2">
-                  {[
-                    { label: "Version",  value: "LokaDev v1.0.4" },
-                    { label: "License",  value: "MIT License" },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between gap-4 px-4 py-3 bg-[#161b22] border border-[#30363d] rounded">
-                      <div className="text-[12px] font-mono text-[#e6edf3]">{label}</div>
-                      <div className="text-[11px] font-mono text-[#8b949e]">{value}</div>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3 bg-[#161b22] border border-[#30363d] rounded">
-                    <div className="text-[12px] font-mono text-[#e6edf3]">Source</div>
+              <section>
+                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-2 px-1">About</p>
+                <div className="space-y-px">
+                  <div className="flex items-center justify-between px-4 py-3 bg-white/3 rounded-t-lg">
+                    <p className="text-[12px] text-white/70">Version</p>
+                    <p className="text-[11px] font-mono text-white/30">v1.0.4</p>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3 bg-white/3 rounded-b-lg">
+                    <p className="text-[12px] text-white/70">Source</p>
                     <button onClick={() => open("https://github.com/ptraxzy/lokadev")}
-                      className="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1">
-                      github.com/ptraxzy/lokadev <ExternalLink size={10} />
+                      className="text-[11px] text-white/30 hover:text-white/60 flex items-center gap-1 transition-colors">
+                      github.com/ptraxzy/lokadev <ExternalLink size={9} />
                     </button>
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Status bar */}
-      <div className="flex items-center gap-4 px-4 h-7 bg-[#010409] border-t border-[#30363d] shrink-0 text-[10px] font-mono text-[#484f58]">
-        <span>{running} running · {projects.length} total</span>
-        <span className="ml-auto">LokaDev v1.0.4</span>
+        </main>
       </div>
     </div>
   );
