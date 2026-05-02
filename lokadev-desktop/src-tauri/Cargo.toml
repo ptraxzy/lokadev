@@ -6,30 +6,23 @@ authors = ["ptraxzy"]
 license = "MIT"
 repository = "https://github.com/ptraxzy/lokadev"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.77"
+
+[lib]
+name = "lokadev_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "1.6", features = [
-  "shell-open",
-  "shell-execute",
-  "system-tray",
-  "window-hide",
-  "window-show",
-  "window-minimize",
-  "window-unminimize",
-  "window-maximize",
-  "window-unmaximize",
-  "window-close",
-  "window-set-focus",
-  "notification-all",
-] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-reqwest = { version = "0.11", features = ["json", "blocking"] }
-tokio = { version = "1.0", features = ["full"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
 
 [features]
+default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
