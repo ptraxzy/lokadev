@@ -1,0 +1,103 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist",
+    "withGlobalTauri": true
+  },
+  "package": {
+    "productName": "LokaDev",
+    "version": "1.0.4"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true,
+        "execute": true,
+        "sidecar": false,
+        "scope": [
+          { "name": "lokadev", "cmd": "lokadev", "args": true },
+          { "name": "lokadev-path", "cmd": "/usr/local/bin/lokadev", "args": true }
+        ]
+      },
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["http://localhost:25000/**"]
+      },
+      "notification": { "all": true },
+      "window": { "all": true }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "dev.lokadev.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "resources": [],
+      "externalBin": [],
+      "copyright": "",
+      "category": "DeveloperTool",
+      "shortDescription": "Next-generation local development environment",
+      "longDescription": "LokaDev is a next-generation local development environment that lets you run multiple isolated projects simultaneously with their own web servers, databases, and runtime versions.",
+      "deb": {
+        "depends": ["libwebkit2gtk-4.0", "libayatana-appindicator3-1"]
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.0", "libayatana-appindicator"]
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.13",
+        "exceptionDomain": "localhost"
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": "",
+        "wix": {
+          "language": "en-US"
+        }
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "systemTray": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "LokaDev",
+        "width": 1000,
+        "height": 660,
+        "minWidth": 800,
+        "minHeight": 540,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": false,
+        "center": true,
+        "visible": true,
+        "focus": true,
+        "skipTaskbar": false,
+        "theme": "Dark"
+      }
+    ]
+  }
+}
