@@ -211,7 +211,7 @@ function useServices() {
   return { services, busy, toggle };
 }
 
-function useLogs(projects: Project[]) {
+function useLogs() {
   const [logs, setLogs]         = useState<LogEntry[]>([]);
   const [source, setSource]     = useState("daemon");
   const endRef                  = useRef<HTMLDivElement>(null);
