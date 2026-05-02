@@ -30,12 +30,12 @@ sudo dpkg -i lokadev_*_amd64.deb
 
 ### Fedora 41+ / Fedora 43 (Tauri v2)
 
-> **Note:** Fedora 41+ removed `webkit2gtk4.0-devel`. Tauri v2 uses `webkitgtk6.0-devel` instead.
+> **Note:** Fedora 41+ removed `webkit2gtk4.0-devel`. Tauri v2 requires `webkit2gtk4.1-devel` instead.
 
 ```bash
 # 1. System dependencies (Fedora 41+ / Fedora 43)
 sudo dnf install -y gcc openssl-devel librsvg2-devel \
-  webkitgtk6.0-devel libayatana-appindicator-gtk3-devel
+  webkit2gtk4.1-devel libayatana-appindicator-gtk3-devel
 
 # 2. Rust (if not installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -106,7 +106,7 @@ npm run tauri dev
 
 | Error | Fix |
 |---|---|
-| `No match for argument: webkit2gtk4.0-devel` | Fedora 41+: use `webkitgtk6.0-devel` (Tauri v2 requirement) |
+| `No match for argument: webkit2gtk4.0-devel` | Fedora 41+: use `webkit2gtk4.1-devel` (Tauri v2 requirement) |
 | `cd: no such file or directory: lokadev-desktop` | You're inside `lokadev-app/`. Run `cd ~/lokadev/lokadev-desktop` |
 | `npm error Missing script: "tauri"` | Wrong directory. Must be inside `lokadev-desktop/`, not the repo root |
 | `Use pnpm instead` | You're at the monorepo root. `cd lokadev-desktop` first |
