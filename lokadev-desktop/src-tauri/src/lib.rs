@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -9,6 +10,8 @@ use tauri::{
     Manager,
 };
 use tauri_plugin_shell::ShellExt;
+
+// ── Data types ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
@@ -22,25 +25,78 @@ pub struct Project {
     pub pids: Vec<i32>,
 }
 
-/// Fetch all projects from the LokaDev daemon REST API
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServiceInfo {
+    pub name: String,
+    pub version: String,
+    pub port: u16,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LogEntry {
+    pub t: String,
+    pub l: String,
+    pub m: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppSettings {
+    pub start_at_login: bool,
+    pub minimize_to_tray: bool,
+    pub show_notifications: bool,
+    pub daemon_port: String,
+    pub projects_dir: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            start_at_login: false,
+            minimize_to_tray: true,
+            show_notifications: false,
+            daemon_port: "25000".to_string(),
+            projects_dir: "~/lokadev-projects".to_string(),
+        }
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn find_lokadev_binary() -> String {
+    for candidate in &["/usr/local/bin/lokadev", "/usr/bin/lokadev", "lokadev"] {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "lokadev".to_string()
+}
+
+fn settings_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+    PathBuf::from(home).join(".config/lokadev/settings.json")
+}
+
+fn build_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+// ── Commands ──────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 async fn list_projects() -> Result<Vec<Project>, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .map_err(|e| e.to_string())?;
-
+    let client = build_client()?;
     let resp = client
         .get("http://localhost:25000/api/projects")
         .send()
         .await
         .map_err(|e| format!("Daemon not running: {}", e))?;
-
-    let projects: Vec<Project> = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(projects)
+    resp.json::<Vec<Project>>().await.map_err(|e| e.to_string())
 }
 
-/// Execute a lokadev CLI command (start, stop, restart, create, delete ...)
 #[tauri::command]
 async fn run_lokadev(args: Vec<String>) -> Result<String, String> {
     let binary = find_lokadev_binary();
@@ -61,7 +117,6 @@ async fn run_lokadev(args: Vec<String>) -> Result<String, String> {
     }
 }
 
-/// Start the LokaDev daemon in the background
 #[tauri::command]
 async fn start_daemon() -> Result<(), String> {
     let binary = find_lokadev_binary();
@@ -74,29 +129,97 @@ async fn start_daemon() -> Result<(), String> {
     Ok(())
 }
 
-fn find_lokadev_binary() -> String {
-    for candidate in &[
-        "/usr/local/bin/lokadev",
-        "/usr/bin/lokadev",
-        "lokadev",
-    ] {
-        if std::path::Path::new(candidate).exists() {
-            return candidate.to_string();
+#[tauri::command]
+async fn list_services() -> Result<Vec<ServiceInfo>, String> {
+    let client = build_client()?;
+    match client
+        .get("http://localhost:25000/api/services")
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            resp.json::<Vec<ServiceInfo>>()
+                .await
+                .map_err(|e| e.to_string())
         }
+        _ => Ok(vec![]),
     }
-    "lokadev".to_string()
 }
+
+#[tauri::command]
+async fn control_service(name: String, action: String) -> Result<(), String> {
+    let client = build_client()?;
+    let url = format!("http://localhost:25000/api/services/{}/{}", name, action);
+    match client.post(&url).send().await {
+        Ok(resp) if resp.status().is_success() => return Ok(()),
+        _ => {}
+    }
+    // Fallback: lokadev service <action> <name>
+    let binary = find_lokadev_binary();
+    let output = Command::new(&binary)
+        .args(&["service", &action, &name.to_lowercase()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed: {}", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_logs(project: Option<String>) -> Result<Vec<LogEntry>, String> {
+    let client = build_client()?;
+    let url = match &project {
+        Some(p) if p != "daemon" => {
+            format!("http://localhost:25000/api/logs?project={}", p)
+        }
+        _ => "http://localhost:25000/api/logs".to_string(),
+    };
+    match client.get(&url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            resp.json::<Vec<LogEntry>>()
+                .await
+                .map_err(|e| e.to_string())
+        }
+        _ => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+async fn load_settings() -> Result<AppSettings, String> {
+    let path = settings_path();
+    if !path.exists() {
+        return Ok(AppSettings::default());
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn save_settings(settings: AppSettings) -> Result<(), String> {
+    let path = settings_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+// ── App entry ─────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            // ── System tray menu ──────────────────────────────────
-            let show      = MenuItemBuilder::with_id("show",      "Show LokaDev").build(app)?;
-            let dashboard = MenuItemBuilder::with_id("dashboard", "Open Dashboard").build(app)?;
-            let sep       = PredefinedMenuItem::separator(app)?;
-            let quit      = MenuItemBuilder::with_id("quit",      "Quit LokaDev").build(app)?;
+            let show = MenuItemBuilder::with_id("show", "Show LokaDev").build(app)?;
+            let dashboard =
+                MenuItemBuilder::with_id("dashboard", "Open Dashboard").build(app)?;
+            let sep = PredefinedMenuItem::separator(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit LokaDev").build(app)?;
 
             let menu = MenuBuilder::new(app)
                 .item(&show)
@@ -105,13 +228,11 @@ pub fn run() {
                 .item(&quit)
                 .build()?;
 
-            // ── Tray icon ─────────────────────────────────────────
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .menu_on_left_click(false)
                 .tooltip("LokaDev")
                 .on_tray_icon_event(|tray, event| {
-                    // Left-click toggles the window
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
@@ -144,7 +265,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // ── Auto-start daemon ─────────────────────────────────
+            // Auto-start daemon
             thread::spawn(|| {
                 thread::sleep(Duration::from_millis(600));
                 let binary = find_lokadev_binary();
@@ -158,7 +279,6 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Close button → hide to tray instead of quitting
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
@@ -168,6 +288,11 @@ pub fn run() {
             list_projects,
             run_lokadev,
             start_daemon,
+            list_services,
+            control_service,
+            get_logs,
+            load_settings,
+            save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LokaDev desktop app");
