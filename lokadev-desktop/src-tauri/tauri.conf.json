@@ -53,7 +53,7 @@
         "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"]
       },
       "rpm": {
-        "depends": ["webkitgtk6.0", "libayatana-appindicator-gtk3"]
+        "depends": ["webkit2gtk4.1", "libayatana-appindicator-gtk3"]
       }
     },
     "windows": {
