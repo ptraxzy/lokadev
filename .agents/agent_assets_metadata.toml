@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "cLOjzUV-sk7aMzNvcKwXI"
+uri = "file://artifacts/lokadev/public/hero-dashboard.png"
+type = "image"
+title = "Dark themed developer dashboard mockup"
