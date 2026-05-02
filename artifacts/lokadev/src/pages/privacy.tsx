@@ -142,7 +142,7 @@ export default function PrivacyPage() {
             <p>
               If you have questions about this Privacy Policy or how LokaDev handles your data, you can open
               an issue on our{" "}
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href="https://github.com/ptraxzy/lokadev/issues" target="_blank" rel="noreferrer" className="text-primary hover:underline">
                 GitHub repository
               </a>
               .
