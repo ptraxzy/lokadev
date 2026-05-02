@@ -1,0 +1,31 @@
+[Unit]
+Description=LokaDev Local Development Environment
+Documentation=https://lokadev.app/docs
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/lokadev daemon
+Restart=on-failure
+RestartSec=5
+
+# Run as the logged-in user (rootless namespaces)
+User=%i
+Group=%i
+
+# Soft limits — projects may open many file descriptors
+LimitNOFILE=65536
+
+# Allow user namespaces
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Harden the service
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/home/%i/lokadev-projects
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LokaDev
+Comment=Next-generation local development environment
+Exec=lokadev daemon
+Icon=lokadev
+Terminal=false
+Type=Application
+Categories=Development;WebDevelopment;
+Keywords=php;node;python;nginx;mysql;postgres;local;development;
+StartupNotify=true

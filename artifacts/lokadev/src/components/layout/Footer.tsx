@@ -18,13 +18,14 @@ export function Footer() {
               The next-generation local development environment. Fast, isolated, and natively cross-platform.
             </p>
           </div>
-          
+
           <div>
             <h3 className="font-semibold mb-4 text-foreground">Resources</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link href="/docs" className="hover:text-primary transition-colors">Documentation</Link></li>
-              <li><Link href="/docs#installation" className="hover:text-primary transition-colors">Installation</Link></li>
-              <li><Link href="/docs#features" className="hover:text-primary transition-colors">Features</Link></li>
+              <li><Link href="/docs#install-fedora" className="hover:text-primary transition-colors">Fedora Installation</Link></li>
+              <li><Link href="/docs#install-windows" className="hover:text-primary transition-colors">Windows Installation</Link></li>
+              <li><Link href="/docs#cli" className="hover:text-primary transition-colors">CLI Reference</Link></li>
             </ul>
           </div>
 
@@ -34,15 +35,16 @@ export function Footer() {
               <li><Link href="/download" className="hover:text-primary transition-colors">Download</Link></li>
               <li><a href="https://github.com" className="hover:text-primary transition-colors">GitHub Repository</a></li>
               <li><a href="#" className="hover:text-primary transition-colors">Discord Community</a></li>
+              <li><Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
             </ul>
           </div>
         </div>
         <div className="border-t border-border/40 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} LokaDev. All rights reserved.
+            &copy; {new Date().getFullYear()} LokaDev. Open-source under the MIT License.
           </p>
           <div className="flex gap-4 text-xs text-muted-foreground">
-            <a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             <a href="#" className="hover:text-foreground transition-colors">Terms of Service</a>
           </div>
         </div>
