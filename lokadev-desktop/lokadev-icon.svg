@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="180" fill="#0d1117"/>
+  <!-- Outer glow border -->
+  <rect x="4" y="4" width="1016" height="1016" rx="178" fill="none" stroke="#06b6d4" stroke-width="4" opacity="0.4"/>
+
+  <!-- Terminal bracket left -->
+  <path d="M 240 420 L 160 512 L 240 604" stroke="#06b6d4" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Terminal bracket right -->
+  <path d="M 784 420 L 864 512 L 784 604" stroke="#06b6d4" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Underscore / cursor -->
+  <rect x="390" y="568" width="244" height="44" rx="22" fill="#06b6d4" opacity="0.9"/>
+  <!-- Prompt symbol -->
+  <path d="M 400 480 L 460 512 L 400 544" stroke="#e6edf3" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
