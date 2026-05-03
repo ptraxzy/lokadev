@@ -389,6 +389,116 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
   );
 }
 
+// ── Service metadata ──────────────────────────────────────────────────────────
+
+interface SvcMeta {
+  icon: string;
+  desc: string;
+  connStr: (port: number) => string;
+  webUIs: { label: string; url: (port: number) => string }[];
+}
+
+const SVC_META: Record<string, SvcMeta> = {
+  "MySQL": {
+    icon: "🐬",
+    desc: "Relational database server — used by most PHP apps",
+    connStr: p => `mysql://root@localhost:${p}`,
+    webUIs: [
+      { label: "phpMyAdmin", url: () => "http://localhost/phpmyadmin" },
+      { label: "Adminer",    url: () => "http://localhost/adminer" },
+    ],
+  },
+  "MariaDB": {
+    icon: "🦭",
+    desc: "MySQL-compatible database — drop-in replacement",
+    connStr: p => `mysql://root@localhost:${p}`,
+    webUIs: [
+      { label: "phpMyAdmin", url: () => "http://localhost/phpmyadmin" },
+      { label: "Adminer",    url: () => "http://localhost/adminer" },
+    ],
+  },
+  "PostgreSQL": {
+    icon: "🐘",
+    desc: "Advanced relational database server",
+    connStr: p => `postgresql://postgres@localhost:${p}`,
+    webUIs: [
+      { label: "Adminer",    url: p => `http://localhost/adminer?pgsql=localhost:${p}` },
+      { label: "pgAdmin",    url: () => "http://localhost:5050" },
+    ],
+  },
+  "Redis": {
+    icon: "⚡",
+    desc: "In-memory cache and session store",
+    connStr: p => `redis://localhost:${p}`,
+    webUIs: [
+      { label: "Redis Insight", url: () => "http://localhost:8001" },
+    ],
+  },
+  "Nginx": {
+    icon: "🌐",
+    desc: "Web server and reverse proxy",
+    connStr: () => "http://localhost",
+    webUIs: [],
+  },
+  "Apache": {
+    icon: "🪶",
+    desc: "Classic web server used with PHP",
+    connStr: () => "http://localhost",
+    webUIs: [],
+  },
+  "Caddy": {
+    icon: "🔒",
+    desc: "Modern web server with automatic HTTPS",
+    connStr: () => "http://localhost",
+    webUIs: [],
+  },
+  "__default__": {
+    icon: "⚙️",
+    desc: "Background service",
+    connStr: p => `localhost:${p}`,
+    webUIs: [],
+  },
+};
+
+const DB_TOOLS: { icon: string; label: string; desc: string; url: string }[] = [
+  {
+    icon: "🐘",
+    label: "phpMyAdmin",
+    desc: "Web UI for MySQL / MariaDB",
+    url: "http://localhost/phpmyadmin",
+  },
+  {
+    icon: "🛠️",
+    label: "Adminer",
+    desc: "Lightweight DB manager — MySQL, PgSQL, SQLite",
+    url: "http://localhost/adminer",
+  },
+  {
+    icon: "📊",
+    label: "pgAdmin 4",
+    desc: "Full-featured PostgreSQL admin panel",
+    url: "http://localhost:5050",
+  },
+  {
+    icon: "⚡",
+    label: "Redis Insight",
+    desc: "Visualise & query your Redis data",
+    url: "http://localhost:8001",
+  },
+  {
+    icon: "🗃️",
+    label: "SQLite Browser",
+    desc: "Open DB Browser for SQLite (desktop app)",
+    url: "https://sqlitebrowser.org/dl/",
+  },
+  {
+    icon: "📡",
+    label: "TablePlus",
+    desc: "Native DB client — MySQL, PgSQL, Redis…",
+    url: "https://tableplus.com",
+  },
+];
+
 // ── App ────────────────────────────────────────────────────────────────────────
 
 type Tab = "projects" | "services" | "logs" | "settings";
@@ -634,42 +744,118 @@ type = "${selectedProject.database}"`}
               {/* SERVICES */}
               {tab === "services" && (
                 <div className="flex-1 overflow-y-auto p-6">
+
+                  {/* Header */}
                   <div className="mb-6">
                     <h2 className={c("text-[15px] font-semibold", L.text, L.dtext)}>Services</h2>
                     <p className={c("text-sm mt-1", L.muted, L.dmuted)}>Global services shared across all projects</p>
                   </div>
-                  <div className="space-y-2 max-w-2xl">
-                    {services.map(svc => (
-                      <div key={svc.name}
-                        className={c("flex items-center gap-4 px-5 py-4 rounded-xl border transition-all",
-                          L.surface, L.dsurface, L.border, L.dborder, "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]")}>
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          svc.status === "running" ? "bg-emerald-500 pulse-dot" : "bg-[#D0CCC5] dark:bg-[#4A4845]"
-                        }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2">
-                            <span className={c("text-[13px] font-medium", L.text, L.dtext)}>{svc.name}</span>
-                            <span className={c("text-xs font-mono", L.dim, L.ddim)}>v{svc.version}</span>
+
+                  {/* Service cards */}
+                  <div className="space-y-3 max-w-2xl">
+                    {services.map(svc => {
+                      const meta = SVC_META[svc.name] ?? SVC_META["__default__"];
+                      const running = svc.status === "running";
+                      return (
+                        <div key={svc.name}
+                          className={c("rounded-2xl border transition-all", L.surface, L.dsurface, L.border, L.dborder,
+                            "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]")}>
+
+                          {/* Top row */}
+                          <div className="flex items-center gap-4 px-5 py-4">
+                            {/* Icon */}
+                            <div className={c("w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 border",
+                              L.bg, L.dbg, L.border, L.dborder)}>
+                              {meta.icon}
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline gap-2">
+                                <span className={c("text-[13px] font-semibold", L.text, L.dtext)}>{svc.name}</span>
+                                <span className={c("text-xs font-mono", L.dim, L.ddim)}>v{svc.version}</span>
+                              </div>
+                              <span className={c("text-xs", L.muted, L.dmuted)}>{meta.desc}</span>
+                            </div>
+
+                            {/* Status badge */}
+                            <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
+                              running
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+                                : c("bg-[#F0EDE8] dark:bg-[#2C2A28]", L.muted, L.dmuted)
+                            }`}>
+                              {running ? "Running" : "Stopped"}
+                            </span>
+
+                            {/* Start / Stop */}
+                            <button onClick={() => toggleSvc(svc)} disabled={svcBusy === svc.name}
+                              className={`p-2 rounded-xl transition-all disabled:opacity-40 ${
+                                running
+                                  ? "text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  : "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              }`}
+                              title={running ? "Stop" : "Start"}>
+                              {svcBusy === svc.name
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : running ? <Square size={14} /> : <Play size={14} />
+                              }
+                            </button>
                           </div>
-                          <span className={c("text-xs font-mono", L.dim, L.ddim)}>:{svc.port}</span>
+
+                          {/* Bottom row — port + web UI buttons */}
+                          <div className={c("flex items-center gap-3 px-5 py-3 border-t", L.border, L.dborder)}>
+                            {/* Port pill */}
+                            <span className={c("text-xs font-mono px-2 py-0.5 rounded-lg border", L.bg, L.dbg, L.border, L.dborder, L.dim, L.ddim)}>
+                              :{svc.port}
+                            </span>
+                            {/* Connection string */}
+                            <span className={c("text-xs font-mono", L.dim, L.ddim)}>
+                              {meta.connStr(svc.port)}
+                            </span>
+                            <div className="flex-1" />
+                            {/* Web UI buttons */}
+                            {meta.webUIs.map(ui => (
+                              <button key={ui.label}
+                                onClick={() => open(ui.url(svc.port))}
+                                className={c(
+                                  "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border transition-all font-medium",
+                                  L.surface, L.dsurface, L.border, L.dborder, L.muted, L.dmuted,
+                                  "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]",
+                                  "hover:text-[#1A1815] dark:hover:text-[#EDE9E3]"
+                                )}>
+                                <ExternalLink size={11} />
+                                {ui.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <span className={`text-[13px] w-16 text-right ${
-                          svc.status === "running" ? "text-emerald-600 dark:text-emerald-400" : c(L.dim, L.ddim)
-                        }`}>{svc.status}</span>
-                        <button onClick={() => toggleSvc(svc)} disabled={svcBusy === svc.name}
-                          className={`p-2 rounded-lg transition-all disabled:opacity-40 ${
-                            svc.status === "running"
-                              ? "text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              : "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                          }`}>
-                          {svcBusy === svc.name
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : svc.status === "running" ? <Square size={14} /> : <Play size={14} />
-                          }
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+
+                  {/* Database Tools quick-launch section */}
+                  <div className="mt-8 max-w-2xl">
+                    <p className={c("text-xs uppercase tracking-wider font-medium mb-3 px-1", L.dim, L.ddim)}>
+                      Database Tools
+                    </p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {DB_TOOLS.map(tool => (
+                        <button key={tool.label} onClick={() => open(tool.url)}
+                          className={c(
+                            "flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all text-left",
+                            L.surface, L.dsurface, L.border, L.dborder,
+                            "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]"
+                          )}>
+                          <span className="text-xl">{tool.icon}</span>
+                          <div>
+                            <p className={c("text-[13px] font-medium", L.text, L.dtext)}>{tool.label}</p>
+                            <p className={c("text-xs mt-0.5", L.muted, L.dmuted)}>{tool.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               )}
 
