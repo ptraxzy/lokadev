@@ -281,6 +281,57 @@ async fn save_settings(settings: AppSettings) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// ── DB Tool setup ─────────────────────────────────────────────────────────────
+
+/// Download adminer.php into dest_dir (e.g. /var/www/html or ~/projects)
+#[tauri::command]
+async fn setup_adminer(dest_dir: String) -> Result<String, String> {
+    let dest_dir = if dest_dir.starts_with('~') {
+        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/root"));
+        dest_dir.replacen('~', &home, 1)
+    } else {
+        dest_dir
+    };
+
+    // Ensure directory exists
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Cannot create dir {}: {}", dest_dir, e))?;
+
+    let dest_path = std::path::Path::new(&dest_dir).join("adminer.php");
+
+    // Download latest adminer (single PHP file, ~500KB)
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get("https://www.adminer.org/latest.php")
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    std::fs::write(&dest_path, &bytes)
+        .map_err(|e| format!("Cannot write to {}: {} — try sudo or a writable directory", dest_path.display(), e))?;
+
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+/// Check whether a URL responds (to detect if tool is installed)
+#[tauri::command]
+async fn check_url_alive(url: String) -> bool {
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    client.get(&url).send().await.map(|r| r.status().as_u16() < 500).unwrap_or(false)
+}
+
 // ── App entry ─────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -366,6 +417,8 @@ pub fn run() {
             get_logs,
             load_settings,
             save_settings,
+            setup_adminer,
+            check_url_alive,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LokaDev desktop app");
