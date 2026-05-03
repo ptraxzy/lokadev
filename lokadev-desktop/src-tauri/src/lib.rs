@@ -13,15 +13,25 @@ use tauri_plugin_shell::ShellExt;
 
 // ── Data types ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Accepts both lowercase (JSON-tagged) and PascalCase (Go default) field names
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Project {
+    #[serde(alias = "Name")]
     pub name: String,
+    #[serde(alias = "Dir")]
     pub dir: String,
+    #[serde(alias = "Domain")]
     pub domain: String,
+    #[serde(alias = "Runtime")]
     pub runtime: String,
+    #[serde(alias = "Server")]
     pub server: String,
+    #[serde(alias = "Database")]
     pub database: String,
+    #[serde(alias = "Status")]
     pub status: String,
+    #[serde(alias = "Pids", alias = "PIDs")]
     pub pids: Vec<i32>,
 }
 
@@ -89,12 +99,45 @@ fn build_client() -> Result<reqwest::Client, String> {
 #[tauri::command]
 async fn list_projects() -> Result<Vec<Project>, String> {
     let client = build_client()?;
+    // Connection failure = daemon truly offline → propagate error
     let resp = client
         .get("http://localhost:25000/api/projects")
         .send()
         .await
         .map_err(|e| format!("Daemon not running: {}", e))?;
-    resp.json::<Vec<Project>>().await.map_err(|e| e.to_string())
+
+    // Read raw text so we can handle any response format gracefully
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let trimmed = text.trim();
+
+    // Empty / null / {} → no projects yet, daemon is online
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "{}" {
+        return Ok(vec![]);
+    }
+
+    // Try array first (standard format)
+    if let Ok(list) = serde_json::from_str::<Vec<Project>>(trimmed) {
+        return Ok(list);
+    }
+
+    // Try {"projects": [...]} wrapper
+    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(arr) = obj.get("projects").and_then(|v| v.as_array()) {
+            let list: Vec<Project> = arr.iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect();
+            return Ok(list);
+        }
+        if let Some(arr) = obj.get("data").and_then(|v| v.as_array()) {
+            let list: Vec<Project> = arr.iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect();
+            return Ok(list);
+        }
+    }
+
+    // Unknown format but daemon responded — treat as online, no projects
+    Ok(vec![])
 }
 
 #[tauri::command]
