@@ -284,8 +284,13 @@ function useProjects() {
   }, [refresh]);
 
   const runCmd = async (cmd: string, name: string) => {
-    try { await invoke("run_lokadev", { args: [cmd, name] }); setTimeout(refresh, 800); }
-    catch (e) { console.error(e); }
+    try {
+      await invoke("run_lokadev", { args: [cmd, name] });
+      // Retry several times — daemon registry may take a moment to update
+      setTimeout(refresh, 400);
+      setTimeout(refresh, 1200);
+      setTimeout(refresh, 3000);
+    } catch (e) { console.error(e); }
   };
 
   return { projects, loading, daemonOk, refresh, runCmd };
