@@ -460,42 +460,44 @@ const SVC_META: Record<string, SvcMeta> = {
   },
 };
 
-const DB_TOOLS: { icon: string; label: string; desc: string; url: string }[] = [
-  {
-    icon: "🐘",
-    label: "phpMyAdmin",
-    desc: "Web UI for MySQL / MariaDB",
-    url: "http://localhost/phpmyadmin",
-  },
+const DB_TOOLS: {
+  icon: string; label: string; desc: string; url: string;
+  kind: "auto-adminer" | "link";
+}[] = [
   {
     icon: "🛠️",
     label: "Adminer",
-    desc: "Lightweight DB manager — MySQL, PgSQL, SQLite",
-    url: "http://localhost/adminer",
+    desc: "Lightweight DB manager — MySQL, PgSQL, SQLite (auto-install)",
+    url: "http://localhost/adminer.php",
+    kind: "auto-adminer",
   },
   {
     icon: "📊",
     label: "pgAdmin 4",
     desc: "Full-featured PostgreSQL admin panel",
     url: "http://localhost:5050",
+    kind: "link",
   },
   {
     icon: "⚡",
     label: "Redis Insight",
     desc: "Visualise & query your Redis data",
     url: "http://localhost:8001",
+    kind: "link",
   },
   {
     icon: "🗃️",
-    label: "SQLite Browser",
-    desc: "Open DB Browser for SQLite (desktop app)",
+    label: "DB Browser for SQLite",
+    desc: "Desktop app for SQLite databases",
     url: "https://sqlitebrowser.org/dl/",
+    kind: "link",
   },
   {
     icon: "📡",
     label: "TablePlus",
     desc: "Native DB client — MySQL, PgSQL, Redis…",
     url: "https://tableplus.com",
+    kind: "link",
   },
 ];
 
@@ -520,6 +522,25 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch]     = useState("");
   const [showNew, setShowNew]   = useState(false);
+
+  // Adminer auto-install state
+  const [adminerWebRoot, setAdminerWebRoot] = useState("/var/www/html");
+  const [adminerBusy, setAdminerBusy]       = useState(false);
+  const [adminerMsg, setAdminerMsg]         = useState<{ ok: boolean; text: string } | null>(null);
+
+  const setupAdminer = async () => {
+    setAdminerBusy(true);
+    setAdminerMsg(null);
+    try {
+      const dest = await invoke<string>("setup_adminer", { destDir: adminerWebRoot });
+      setAdminerMsg({ ok: true, text: `Installed at ${dest}` });
+      setTimeout(() => open("http://localhost/adminer.php"), 800);
+    } catch (e) {
+      setAdminerMsg({ ok: false, text: String(e) });
+    } finally {
+      setAdminerBusy(false);
+    }
+  };
 
   const { projects, loading, daemonOk, refresh, runCmd } = useProjects();
   const { services, busy: svcBusy, toggle: toggleSvc }   = useServices();
@@ -838,21 +859,74 @@ type = "${selectedProject.database}"`}
                     <p className={c("text-xs uppercase tracking-wider font-medium mb-3 px-1", L.dim, L.ddim)}>
                       Database Tools
                     </p>
-                    <div className="grid grid-cols-3 gap-3">
-                      {DB_TOOLS.map(tool => (
-                        <button key={tool.label} onClick={() => open(tool.url)}
-                          className={c(
-                            "flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all text-left",
-                            L.surface, L.dsurface, L.border, L.dborder,
-                            "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]"
-                          )}>
-                          <span className="text-xl">{tool.icon}</span>
-                          <div>
-                            <p className={c("text-[13px] font-medium", L.text, L.dtext)}>{tool.label}</p>
-                            <p className={c("text-xs mt-0.5", L.muted, L.dmuted)}>{tool.desc}</p>
+                    <div className="space-y-3">
+
+                      {/* Adminer — auto-install card */}
+                      <div className={c("rounded-2xl border p-5", L.surface, L.dsurface, L.border, L.dborder)}>
+                        <div className="flex items-start gap-4">
+                          <span className="text-2xl mt-0.5">🛠️</span>
+                          <div className="flex-1 min-w-0">
+                            <p className={c("text-[13px] font-semibold", L.text, L.dtext)}>Adminer</p>
+                            <p className={c("text-xs mt-0.5 mb-3", L.muted, L.dmuted)}>
+                              Lightweight DB manager — MySQL, PostgreSQL, SQLite dalam satu halaman web
+                            </p>
+                            {/* Web root input + install button */}
+                            <div className="flex items-center gap-2">
+                              <span className={c("text-xs shrink-0", L.dim, L.ddim)}>Install ke</span>
+                              <input
+                                value={adminerWebRoot}
+                                onChange={e => setAdminerWebRoot(e.target.value)}
+                                className={c(
+                                  "flex-1 rounded-xl px-3 py-1.5 text-[12px] font-mono border outline-none transition-colors",
+                                  L.bg, L.dbg, L.border, L.dborder, L.text, L.dtext,
+                                  "focus:border-[#C8C2BA] dark:focus:border-[#4A4845]"
+                                )}
+                                style={{ WebkitUserSelect: "text", userSelect: "text" }}
+                                placeholder="/var/www/html"
+                              />
+                              <button onClick={setupAdminer} disabled={adminerBusy}
+                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[13px] font-medium bg-[#1A1815] text-white dark:bg-[#EDE9E3] dark:text-[#1A1815] hover:opacity-90 disabled:opacity-40 transition-all shrink-0">
+                                {adminerBusy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                                {adminerBusy ? "Installing…" : "Setup & Open"}
+                              </button>
+                              <button onClick={() => open("http://localhost/adminer.php")}
+                                className={c("p-2 rounded-xl border transition-all", L.surface, L.dsurface, L.border, L.dborder, L.muted, L.dmuted, "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]")}
+                                title="Open Adminer">
+                                <ExternalLink size={13} />
+                              </button>
+                            </div>
+                            {adminerMsg && (
+                              <p className={`text-xs mt-2 ${adminerMsg.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                                {adminerMsg.ok ? "✓ " : "✗ "}{adminerMsg.text}
+                                {!adminerMsg.ok && adminerMsg.text.includes("Cannot write") && (
+                                  <span className={c("block mt-1", L.dim, L.ddim)}>
+                                    Coba jalankan: <code className="font-mono">sudo chmod o+w {adminerWebRoot}</code> — atau ganti path ke direktori yang kamu punya (misal <code className="font-mono">~/projects</code>)
+                                  </span>
+                                )}
+                              </p>
+                            )}
                           </div>
-                        </button>
-                      ))}
+                        </div>
+                      </div>
+
+                      {/* Other tools — simple grid */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {DB_TOOLS.filter(t => t.kind === "link").map(tool => (
+                          <button key={tool.label} onClick={() => open(tool.url)}
+                            className={c(
+                              "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
+                              L.surface, L.dsurface, L.border, L.dborder,
+                              "hover:border-[#C8C2BA] dark:hover:border-[#4A4845]"
+                            )}>
+                            <span className="text-xl shrink-0">{tool.icon}</span>
+                            <div className="min-w-0">
+                              <p className={c("text-[13px] font-medium", L.text, L.dtext)}>{tool.label}</p>
+                              <p className={c("text-xs mt-0.5 truncate", L.muted, L.dmuted)}>{tool.desc}</p>
+                            </div>
+                            <ExternalLink size={12} className={c("ml-auto shrink-0", L.dim, L.ddim)} />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
