@@ -94,49 +94,79 @@ fn build_client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Extract a string field trying multiple name variants (lowercase + PascalCase + snake_case)
+fn pick_str(v: &serde_json::Value, keys: &[&str]) -> String {
+    for k in keys {
+        if let Some(s) = v.get(k).and_then(|x| x.as_str()) {
+            return s.to_string();
+        }
+    }
+    String::new()
+}
+
+/// Parse a single project JSON value using any known field name format
+fn parse_project(v: &serde_json::Value) -> Project {
+    let pids = v.get("pids")
+        .or_else(|| v.get("Pids"))
+        .or_else(|| v.get("PIDs"))
+        .and_then(|x| x.as_array())
+        .map(|arr| arr.iter().filter_map(|n| n.as_i64().map(|n| n as i32)).collect())
+        .unwrap_or_default();
+
+    Project {
+        name:     pick_str(v, &["name",     "Name"]),
+        dir:      pick_str(v, &["dir",      "Dir",      "path",      "Path",     "directory"]),
+        domain:   pick_str(v, &["domain",   "Domain"]),
+        runtime:  pick_str(v, &["runtime",  "Runtime",  "lang",      "Lang"]),
+        server:   pick_str(v, &["server",   "Server",   "webserver", "WebServer","web_server"]),
+        database: pick_str(v, &["database", "Database", "db",        "Db",       "DB"]),
+        status:   pick_str(v, &["status",   "Status"]),
+        pids,
+    }
+}
+
+/// Find an array inside a JSON value — handles bare array, {projects:[...]}, {data:[...]}, etc.
+fn extract_array(val: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
+    if let Some(arr) = val.as_array() {
+        return Some(arr);
+    }
+    for key in &["projects", "Projects", "data", "Data", "items", "Items", "list"] {
+        if let Some(arr) = val.get(key).and_then(|v| v.as_array()) {
+            return Some(arr);
+        }
+    }
+    None
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 async fn list_projects() -> Result<Vec<Project>, String> {
     let client = build_client()?;
-    // Connection failure = daemon truly offline → propagate error
+    // Connection failure = daemon truly offline → propagate Err so frontend marks offline
     let resp = client
         .get("http://localhost:25000/api/projects")
         .send()
         .await
         .map_err(|e| format!("Daemon not running: {}", e))?;
 
-    // Read raw text so we can handle any response format gracefully
     let text = resp.text().await.map_err(|e| e.to_string())?;
     let trimmed = text.trim();
 
-    // Empty / null / {} → no projects yet, daemon is online
-    if trimmed.is_empty() || trimmed == "null" || trimmed == "{}" {
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
         return Ok(vec![]);
     }
 
-    // Try array first (standard format)
-    if let Ok(list) = serde_json::from_str::<Vec<Project>>(trimmed) {
-        return Ok(list);
+    let val: serde_json::Value = serde_json::from_str(trimmed)
+        .map_err(|e| e.to_string())?;
+
+    if let Some(arr) = extract_array(&val) {
+        return Ok(arr.iter().map(parse_project).collect());
     }
 
-    // Try {"projects": [...]} wrapper
-    if let Ok(obj) = serde_json::from_str::<serde_json::Value>(trimmed) {
-        if let Some(arr) = obj.get("projects").and_then(|v| v.as_array()) {
-            let list: Vec<Project> = arr.iter()
-                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                .collect();
-            return Ok(list);
-        }
-        if let Some(arr) = obj.get("data").and_then(|v| v.as_array()) {
-            let list: Vec<Project> = arr.iter()
-                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                .collect();
-            return Ok(list);
-        }
-    }
-
-    // Unknown format but daemon responded — treat as online, no projects
+    // Daemon responded but in an unexpected shape — online but no projects
     Ok(vec![])
 }
 
